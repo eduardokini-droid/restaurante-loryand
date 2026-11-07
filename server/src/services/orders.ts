@@ -102,8 +102,8 @@ async function resolveAccount(tx: Tx, target: OrderInput['target'], ctx: OrderCo
 /** Transiciones permitidas. Cocina/barra: new → preparing → ready. Sala: ready → received → delivered. */
 const TRANSITIONS: Record<string, string[]> = {
   held: ['new', 'cancelled'],
-  new: ['preparing', 'ready', 'cancelled'],
-  preparing: ['ready', 'new', 'cancelled'],
+  new: ['preparing', 'ready', 'delivered', 'cancelled'],  // delivered: servido directamente (p. ej. barra)
+  preparing: ['ready', 'new', 'delivered', 'cancelled'],
   ready: ['received', 'delivered', 'preparing'],
   received: ['delivered', 'ready'],
   delivered: [],

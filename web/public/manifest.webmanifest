@@ -1,0 +1,8 @@
+{
+  "name": "Restaurante Loryand",
+  "short_name": "Loryand",
+  "start_url": "/personal",
+  "display": "standalone",
+  "background_color": "#f6f1e9",
+  "theme_color": "#44573d"
+}

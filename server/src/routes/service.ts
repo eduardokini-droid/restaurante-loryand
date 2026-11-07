@@ -295,7 +295,7 @@ export default async function serviceRoutes(app: FastifyInstance) {
     const est = establishmentOf(req);
     return sql`
       select o.id as order_id, o.number, o.created_at, o.note, o.source,
-             coalesce(t.label, 'Barra · ' || a.bar_name) as place, w.name as waiter_name,
+             coalesce('Mesa ' || t.label, 'Barra · ' || a.bar_name) as place, w.name as waiter_name,
              json_agg(json_build_object('id', i.id, 'name', i.name, 'option', i.option, 'qty', i.qty, 'status', i.status, 'course', i.course)
                       order by i.course, i.name) as items
       from orders o
