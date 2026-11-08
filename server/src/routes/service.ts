@@ -53,9 +53,9 @@ export default async function serviceRoutes(app: FastifyInstance) {
     const [{ settings }] = await sql`select settings from establishments where id = ${est}`;
     const onlyMine = a.kind === 'waiter' && !settings.sharedTables;
     const tables = await sql`
-      select t.id, t.label, t.zone, t.seats, t.physical_state, t.access_open,
+      select t.id, t.label, t.zone, t.seats, t.physical_state, t.access_open, t.pos_x, t.pos_y, t.shape, t.join_group,
              a.id as account_id, a.opened_at,
-             coalesce(x.total, 0)::int as total_cents, coalesce(p.paid, 0)::int as paid_cents,
+             (coalesce(x.total, 0) - coalesce((select sum(d.amount_cents) from account_discounts d where d.account_id = a.id), 0))::int as total_cents, coalesce(p.paid, 0)::int as paid_cents,
              coalesce(x.undelivered, 0)::int as undelivered, coalesce(x.ready, 0)::int as ready, coalesce(x.held, 0)::int as held,
              coalesce(r.kinds, '{}') as requests
       from tables t
@@ -74,7 +74,7 @@ export default async function serviceRoutes(app: FastifyInstance) {
     const bar = await sql`
       select a.id as account_id, a.bar_name, a.opened_at, w.name as waiter_name,
              coalesce((select sum(i.unit_cents * i.qty) from orders o join order_items i on i.order_id = o.id
-                       where o.account_id = a.id and i.status <> 'cancelled'), 0)::int as total_cents,
+                       where o.account_id = a.id and i.status <> 'cancelled'), 0)::int - coalesce((select sum(d.amount_cents) from account_discounts d where d.account_id = a.id), 0)::int as total_cents,
              coalesce((select sum(amount_cents) from payments where account_id = a.id), 0)::int as paid_cents
       from accounts a left join waiters w on w.id = a.waiter_id
       where a.establishment_id = ${est} and a.status = 'open' and a.bar_name is not null

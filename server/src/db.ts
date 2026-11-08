@@ -4,7 +4,6 @@ import { config } from './config.js';
 export const sql = postgres(config.databaseUrl, {
   max: 10,
   onnotice: () => {},
-  types: { bigint: postgres.BigInt },
 });
 export type Sql = typeof sql;
 export type Tx = postgres.TransactionSql;

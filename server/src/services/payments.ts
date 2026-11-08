@@ -76,6 +76,12 @@ export async function registerPayment(
       await tx`update service_requests set status = 'attended', attended_at = now()
                where table_id = ${acc.table_id} and kind = 'pay' and status = 'open'`;
       const doc = await issueDocument(tx, establishmentId, accountId, 'simplified');
+      // Fidelización: puntos por euro pagado si la cuenta tiene un cliente identificado.
+      const [a2] = await tx`select customer_id from accounts where id = ${accountId}`;
+      if (a2.customer_id) {
+        const perEuro = Number(est.settings?.loyalty?.pointsPerEuro ?? 1);
+        await tx`update customers set points = points + ${Math.floor((s.totalCents / 100) * perEuro)} where id = ${a2.customer_id}`;
+      }
       documentId = doc.id;
     }
     return { paymentId: p.id, duplicate: false, changeCents, accountStatus: status, pendingCents: pending, documentId };

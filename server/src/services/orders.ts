@@ -4,6 +4,7 @@ import { badRequest, conflict, notFound } from '../errors.js';
 import { openBarAccount, openTableAccount } from './accounts.js';
 import { activeMenu, menuChoice, SECTION_LABEL, SECTION_ROUTE, validateChoice } from './menu.js';
 import { setPhysicalState } from './tables.js';
+import { consumeForItems } from './stock.js';
 
 export const orderInput = z.object({
   clientRequestId: z.string().min(8).max(100),
@@ -88,12 +89,17 @@ export async function createOrder(input: OrderInput, ctx: OrderContext): Promise
       values (${ctx.establishmentId}, ${accountId}, ${next}, ${ctx.source}, ${ctx.waiterId}, ${ctx.userId}, ${input.clientRequestId}, ${input.note})
       returning id, number`;
 
+    const sold: Array<{ id: string; product_id: string; qty: number }> = [];
     for (const l of lines) {
-      await tx`
+      const [row] = await tx`
         insert into order_items (order_id, product_id, name, option, unit_cents, vat_rate, qty, destination, course, status)
         values (${order.id}, ${l.p.id}, ${l.p.name}, ${l.option}, ${l.p.price_cents}, ${l.p.vat_rate}, ${l.qty},
-                ${l.p.destination}, ${l.course}, ${statusFor(l.course)})`;
+                ${l.p.destination}, ${l.course}, ${statusFor(l.course)})
+        returning id`;
+      sold.push({ id: row.id, product_id: l.p.id, qty: l.qty });
     }
+    // Descuenta del almacén según escandallo (o el artículo vinculado al producto).
+    await consumeForItems(tx, ctx.establishmentId, sold);
     for (const parts of menus) {
       // Cabecera: lleva el precio y no va a ningún puesto. Componentes: a cocina o barra, precio 0.
       const [head] = await tx`
@@ -146,7 +152,7 @@ export async function setItemsStatus(establishmentId: string, itemIds: string[],
   itemIds = [...itemIds];
   return sql.begin(async (tx) => {
     const items = await tx`
-      select i.id, i.status, i.name, i.destination, a.status as account_status
+      select i.id, i.status, i.name, i.destination, i.product_id, i.qty, a.status as account_status
       from order_items i join orders o on o.id = i.order_id join accounts a on a.id = o.account_id
       where i.id in ${tx(itemIds)} and o.establishment_id = ${establishmentId}
       for update of i`;
@@ -166,6 +172,11 @@ export async function setItemsStatus(establishmentId: string, itemIds: string[],
       if (status === 'cancelled' && it.account_status !== 'open') {
         throw conflict('account_closed', 'No se puede anular un producto de una cuenta cerrada');
       }
+    }
+    if (status === 'cancelled') {
+      // Lo anulado vuelve al almacén.
+      const back = items.filter((i) => i.status !== 'cancelled' && i.product_id).map((i) => ({ id: i.id, product_id: i.product_id, qty: i.qty }));
+      await consumeForItems(tx, establishmentId, back, true);
     }
     await tx`
       update order_items set status = ${status}, updated_at = now(),

@@ -6,6 +6,8 @@ import { conflict, forbidden, notFound } from '../errors.js';
 import { parse } from '../validate.js';
 import { notify } from '../realtime.js';
 import { audit } from '../services/audit.js';
+import { AppError } from '../errors.js';
+import { LANGS, translateTexts, translationAvailable } from '../services/translate.js';
 
 export const ALLERGENS = [
   'gluten', 'crustaceos', 'huevos', 'pescado', 'cacahuetes', 'soja', 'lacteos',
@@ -47,6 +49,7 @@ const productSchema = z.object({
   categoryId: z.string().uuid().nullable().default(null),
   subcategoryId: z.string().uuid().nullable().default(null),
   photoUrl: z.string().url().max(500).nullable().default(null),
+  translations: z.partialRecord(z.enum(LANGS), z.object({ name: z.string().max(120).default(''), description: z.string().max(600).default('') })).optional(),
 });
 
 const tableSchema = z.object({
@@ -55,6 +58,9 @@ const tableSchema = z.object({
   seats: z.number().int().min(1).max(40).default(4),
   active: z.boolean().default(true),
   joinGroup: z.string().max(20).nullable().optional().transform((v) => (v?.trim() ? v.trim() : null)),
+  posX: z.number().int().min(0).max(100).nullable().optional(),
+  posY: z.number().int().min(0).max(100).nullable().optional(),
+  shape: z.enum(['square', 'round', 'rect']).optional(),
 });
 
 const id = z.object({ id: z.string().uuid() });
@@ -236,8 +242,10 @@ export default async function adminRoutes(app: FastifyInstance) {
     requireModule(req, 'config');
     const est = establishmentOf(req);
     const { id: cid } = parse(id, req.params);
-    const b = parse(z.object({ name: z.string().min(1).max(60), sort: z.number().int() }).partial(), req.body);
-    const [c] = await sql`update categories set ${sql(b as Record<string, unknown>)} where id = ${cid} and establishment_id = ${est} returning *`;
+    const b = parse(z.object({ name: z.string().min(1).max(60), sort: z.number().int(), translations: z.partialRecord(z.enum(LANGS), z.string().max(60)) }).partial(), req.body);
+    const cols: Record<string, unknown> = { ...b };
+    if (b.translations) cols.translations = sql.json(b.translations);
+    const [c] = await sql`update categories set ${sql(cols)} where id = ${cid} and establishment_id = ${est} returning *`;
     if (!c) throw notFound('Categoría');
     notify(est, ['products']);
     return c;
@@ -276,10 +284,11 @@ export default async function adminRoutes(app: FastifyInstance) {
     const m: Record<string, string> = {
       name: 'name', description: 'description', priceCents: 'price_cents', vatRate: 'vat_rate', destination: 'destination',
       course: 'course', visible: 'visible', options: 'options', allergens: 'allergens', categoryId: 'category_id',
-      subcategoryId: 'subcategory_id', photoUrl: 'photo_url',
+      subcategoryId: 'subcategory_id', photoUrl: 'photo_url', translations: 'translations',
     };
     const out: Record<string, unknown> = {};
     for (const [k, c] of Object.entries(m)) if (p[k as keyof typeof p] !== undefined) out[c] = p[k as keyof typeof p];
+    if (out.translations) out.translations = sql.json(out.translations as never);
     return out;
   };
 
@@ -313,6 +322,28 @@ export default async function adminRoutes(app: FastifyInstance) {
     return p;
   });
 
+  app.get('/api/admin/translation-status', async (req) => {
+    requireModule(req, 'config');
+    return { available: translationAvailable() };
+  });
+
+  /** "Traducir automáticamente desde el español": nombre y descripción a los seis idiomas. */
+  app.post('/api/admin/products/:id/translate', async (req) => {
+    requireModule(req, 'config');
+    const est = establishmentOf(req);
+    const { id: pid } = parse(id, req.params);
+    if (!translationAvailable()) throw new AppError(409, 'translation_unavailable', 'La traducción automática no está configurada (falta la clave de DeepL). Puedes escribir las traducciones a mano.');
+    const [p] = await sql`select name, description, translations from products where id = ${pid} and establishment_id = ${est}`;
+    if (!p) throw notFound('Producto');
+    let t;
+    try { t = await translateTexts([p.name, p.description || ' ']); } catch (e) {
+      throw new AppError(502, 'translation_failed', `No se pudo traducir: ${(e as Error).message}. El producto sigue guardado; inténtalo de nuevo.`);
+    }
+    const translations = Object.fromEntries(LANGS.map((l) => [l, { name: t[l][0], description: p.description ? t[l][1] : '' }]));
+    const [u] = await sql`update products set translations = ${sql.json(translations)} where id = ${pid} returning *`;
+    return u;
+  });
+
   /** Borrar archiva: los pedidos antiguos conservan el nombre y el precio con el que se vendieron. */
   app.delete('/api/admin/products/:id', async (req) => {
     const a = requireModule(req, 'config');
@@ -336,7 +367,7 @@ export default async function adminRoutes(app: FastifyInstance) {
     const b = parse(tableSchema, req.body);
     const [dup] = await sql`select 1 from tables where establishment_id = ${est} and label = ${b.label}`;
     if (dup) throw conflict('table_exists', `Ya existe la mesa ${b.label}`);
-    const { joinGroup, ...rest } = b;
+    const { joinGroup, posX, posY, ...rest } = b;
     const [t] = await sql`insert into tables ${sql({ establishment_id: est, ...rest, join_group: joinGroup ?? null })} returning *`;
     notify(est, ['tables']);
     return t;
@@ -347,7 +378,9 @@ export default async function adminRoutes(app: FastifyInstance) {
     const est = establishmentOf(req);
     const { id: tid } = parse(id, req.params);
     const b = parse(tableSchema.partial().extend({ regenerateQr: z.literal(true).optional() }), req.body);
-    const { regenerateQr, joinGroup, ...cols } = b as typeof b & { joinGroup?: string | null };
+    const { regenerateQr, joinGroup, posX, posY, ...cols } = b as typeof b & { joinGroup?: string | null };
+    if (posX !== undefined) (cols as Record<string, unknown>).pos_x = posX;
+    if (posY !== undefined) (cols as Record<string, unknown>).pos_y = posY;
     if ('joinGroup' in (req.body as object)) (cols as Record<string, unknown>).join_group = joinGroup ?? null;
     if (Object.keys(cols).length) {
       const [t] = await sql`update tables set ${sql(cols as Record<string, unknown>)} where id = ${tid} and establishment_id = ${est} returning id`;

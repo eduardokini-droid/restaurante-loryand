@@ -6,6 +6,7 @@ import { actorFromToken, COOKIE } from './auth.js';
 import { setIo } from './realtime.js';
 import { sql } from './db.js';
 import { bootstrap } from './bootstrap.js';
+import { saveBackup } from './services/backups.js';
 
 const applied = await migrate();
 if (applied.length) console.log('Migraciones aplicadas:', applied.join(', '));
@@ -35,3 +36,17 @@ io.on('connection', async (socket) => {
 });
 
 await app.listen({ port: config.port, host: '0.0.0.0' });
+
+// Copia diaria automática de cada establecimiento activo (se comprueba cada hora).
+async function dailyBackups() {
+  try {
+    const due = await sql`select e.id from establishments e where e.active and not exists (
+      select 1 from backups b where b.establishment_id = e.id and b.kind = 'daily' and b.created_at > now() - interval '24 hours')`;
+    for (const e of due) await saveBackup(sql, e.id, 'daily');
+    if (due.length) app.log.info(`Copias diarias creadas: ${due.length}`);
+  } catch (err) {
+    app.log.error({ err }, 'Error en la copia diaria');
+  }
+}
+setTimeout(dailyBackups, 60_000);
+setInterval(dailyBackups, 3600_000);

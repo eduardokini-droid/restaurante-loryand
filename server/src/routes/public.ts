@@ -39,7 +39,7 @@ export default async function publicRoutes(app: FastifyInstance) {
   app.get('/api/public/table/:token', async (req) => {
     const { token: tk } = parse(token, req.params);
     const t = await tableByToken(tk);
-    const categories = await sql`select id, parent_id, name, sort from categories where establishment_id = ${t.establishment_id} order by sort, name`;
+    const categories = await sql`select id, parent_id, name, sort, translations from categories where establishment_id = ${t.establishment_id} order by sort, name`;
     const products = await sql`
       select id, name, description, price_cents, options, allergens, category_id, subcategory_id, photo_url, translations
       from products where establishment_id = ${t.establishment_id} and visible and not archived order by name`;

@@ -5,9 +5,23 @@ export type DocType = 'proforma' | 'simplified' | 'full';
 const PREFIX: Record<DocType, string> = { proforma: 'P', simplified: 'T', full: 'F' };
 
 /** Desglose de IVA: los precios de la carta incluyen IVA. */
-export function vatBreakdown(lines: Array<{ unitCents: number; qty: number; vatRate: number }>) {
+export function vatBreakdown(lines: Array<{ unitCents: number; qty: number; vatRate: number }>, discountCents = 0) {
   const byRate = new Map<number, number>();
   for (const l of lines) byRate.set(l.vatRate, (byRate.get(l.vatRate) ?? 0) + l.unitCents * l.qty);
+  const gross = [...byRate.values()].reduce((a, b) => a + b, 0);
+  if (discountCents > 0 && gross > 0) {
+    // El descuento se reparte entre los tipos de IVA en proporción a su importe; el redondeo va al mayor.
+    const target = Math.max(0, gross - discountCents);
+    const entries = [...byRate.entries()].sort((a, b) => b[1] - a[1]);
+    let assigned = 0;
+    entries.forEach(([rate, total], i) => {
+      const v = i === entries.length - 1 ? target - assigned : Math.round((total * target) / gross);
+      assigned += v;
+      byRate.set(rate, v);
+    });
+    const largest = entries[0][0];
+    byRate.set(largest, byRate.get(largest)! + (target - [...byRate.values()].reduce((a, b) => a + b, 0)));
+  }
   return [...byRate.entries()].sort((a, b) => a[0] - b[0]).map(([rate, total]) => {
     const base = Math.round(total / (1 + rate / 100));
     return { rate, baseCents: base, vatCents: total - base, totalCents: total };
@@ -27,10 +41,12 @@ export async function issueDocument(tx: Tx, establishmentId: string, accountId: 
   const payload = {
     issuer: est,
     customer: customer ?? null,
+    loyaltyCustomer: summary.customer?.name ?? null,
     place: summary.tableLabel ? `Mesa ${summary.tableLabel}` : `Barra · ${summary.barName}`,
     waiter: summary.waiterName,
     lines,
-    vat: vatBreakdown(lines),
+    discounts: summary.discounts.map((d) => ({ label: d.label, amountCents: d.amountCents })),
+    vat: vatBreakdown(lines, summary.discountCents),
     payments: summary.payments,
   };
   const [doc] = await tx`

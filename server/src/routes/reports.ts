@@ -28,7 +28,8 @@ export default async function reportRoutes(app: FastifyInstance) {
     const pending = await sql`
       select a.id, coalesce('Mesa ' || t.label, 'Barra · ' || a.bar_name) as place, a.opened_at,
              (coalesce((select sum(i.unit_cents*i.qty) from orders o join order_items i on i.order_id = o.id where o.account_id = a.id and i.status <> 'cancelled'), 0)
-              - coalesce((select sum(amount_cents) from payments where account_id = a.id), 0))::int as pending_cents
+              - coalesce((select sum(amount_cents) from payments where account_id = a.id), 0)
+              - coalesce((select sum(d.amount_cents) from account_discounts d where d.account_id = a.id), 0))::int as pending_cents
       from accounts a left join tables t on t.id = a.table_id
       where a.establishment_id = ${est} and a.status = 'open'
       order by a.opened_at`;

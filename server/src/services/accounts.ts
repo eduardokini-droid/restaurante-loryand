@@ -21,6 +21,10 @@ export interface AccountSummary {
     createdAt: string;
   }>;
   payments: Array<{ id: string; method: string; amountCents: number; createdAt: string }>;
+  discounts: Array<{ id: string; label: string; amountCents: number; couponId: string | null }>;
+  customer: { id: string; name: string; points: number } | null;
+  itemsTotalCents: number;
+  discountCents: number;
   totalCents: number;
   paidCents: number;
   pendingCents: number;
@@ -42,8 +46,13 @@ export async function accountSummary(q: Q, accountId: string, establishmentId?: 
     where o.account_id = ${accountId}
     order by o.number, coalesce(i.parent_item_id, i.id), i.parent_item_id nulls first, i.course, i.name`;
   const payments = await q`select id, method, amount_cents, created_at from payments where account_id = ${accountId} order by created_at`;
+  const discounts = await q`select id, label, amount_cents, coupon_id from account_discounts where account_id = ${accountId} order by created_at`;
+  const [customer] = a.customer_id ? await q`select id, name, points from customers where id = ${a.customer_id}` : [];
   const live = items.filter((i) => i.status !== 'cancelled');
-  const totalCents = live.reduce((s, i) => s + i.unit_cents * i.qty, 0);
+  const itemsTotalCents = live.reduce((s, i) => s + i.unit_cents * i.qty, 0);
+  const discountCents = discounts.reduce((s, d) => s + d.amount_cents, 0);
+  // Un descuento reduce el total; nunca lo deja por debajo de cero.
+  const totalCents = Math.max(0, itemsTotalCents - discountCents);
   const paidCents = payments.reduce((s, p) => s + p.amount_cents, 0);
   return {
     id: a.id,
@@ -62,6 +71,10 @@ export async function accountSummary(q: Q, accountId: string, establishmentId?: 
       course: i.course, status: i.status, createdAt: i.order_created_at, parentItemId: i.parent_item_id,
     })),
     payments: payments.map((p) => ({ id: p.id, method: p.method, amountCents: p.amount_cents, createdAt: p.created_at })),
+    discounts: discounts.map((d) => ({ id: d.id, label: d.label, amountCents: d.amount_cents, couponId: d.coupon_id })),
+    customer: customer ? { id: customer.id, name: customer.name, points: customer.points } : null,
+    itemsTotalCents,
+    discountCents,
     totalCents,
     paidCents,
     pendingCents: totalCents - paidCents,
