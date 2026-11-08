@@ -95,3 +95,23 @@ En **Gestión → Impresoras** (solo el administrador) están los pasos y los ar
      (p. ej. `TICKETS`) y elige tipo «Windows» con ese nombre.
 4. Marca qué imprime cada una (cocina, barra, tickets) y pulsa **Imprimir prueba**: deben salir bien la ñ, las tildes y el €.
 5. Para que el agente arranque solo: `Windows + R` → `shell:startup` → acceso directo a `iniciar-agente.bat`.
+
+## 10. Copias fuera del servidor (Supabase Storage)
+Las copias automáticas se guardan en la base de datos del programa. Para tenerlas también fuera, en Supabase:
+
+1. En https://supabase.com crea un **proyecto nuevo** solo para esto (p. ej. `loryand-copias`), región Europa.
+   *No uses la clave principal (service_role) de Studio Loryand: da acceso a toda su base de datos.*
+2. **Storage → New bucket** → nombre `copias-restaurante`, **privado** (sin marcar "Public").
+3. **Project Settings → Storage → S3 Connection**: copia el **Endpoint** y la **Region**.
+   En **S3 Access Keys → New access key**, copia el **Access key ID** y el **Secret access key**
+   (el secreto solo se muestra una vez).
+4. En Render: servicio **restaurante-loryand** → **Environment** → añade:
+   - `BACKUP_S3_ENDPOINT` = el endpoint (termina en `/storage/v1/s3`)
+   - `BACKUP_S3_REGION` = la región (p. ej. `eu-west-3`)
+   - `BACKUP_S3_BUCKET` = `copias-restaurante`
+   - `BACKUP_S3_ACCESS_KEY` y `BACKUP_S3_SECRET_KEY` = las claves del paso 3
+5. Guarda (el servicio se reinicia) y en **Gestión → Copias de seguridad** pulsa **Probar conexión**.
+
+Qué se guarda: `diarias/<local>/dia-DD.json.gz` (los últimos 31 días, se sobrescriben),
+`mensuales/<local>/AAAA-MM.json.gz` (una por mes, permanentes) y las manuales y preventivas.
+Funciona igual con cualquier almacenamiento compatible con S3 (Cloudflare R2, Backblaze…).

@@ -201,7 +201,7 @@ describe('copias de seguridad', () => {
     expect(n).toBe(1);
     const [p] = await sql`select price_cents from products where id = ${P.plato}`;
     expect(p.price_cents).toBe(1000);
-    const kinds = (await call(admin, 'GET', '/api/backups')).json().map((x: { kind: string }) => x.kind);
+    const kinds = (await call(admin, 'GET', '/api/backups')).json().backups.map((x: { kind: string }) => x.kind);
     expect(kinds).toContain('preventive');
     // el administrador sigue con su sesión: los usuarios del panel no se tocan
     expect((await call(admin, 'GET', '/api/auth/me')).statusCode).toBe(200);

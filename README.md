@@ -48,7 +48,7 @@ El manual pedía al personal que vigilara a mano varias cosas. Ahora las garanti
 - **Escandallos con control de unidades**: conversión automática (ml↔l, g↔kg, envases como «1 botella = 0,75 l») y aviso cuando una cantidad parece un error de unidad (30 l en vez de 30 ml). La venta descuenta del almacén y la anulación lo devuelve.
 - **Rentabilidad** por producto: venta sin IVA, coste según escandallo y margen.
 - **Fidelización**: fichas de cliente, visitas, gasto, puntos por euro, clientes con más de 45 días sin venir, cupones generales o personales con QR, caducidad, mínimo y número de usos, y **tarjeta digital** del cliente en `/tarjeta/<código>`. El cupón descuenta del total (con el IVA repartido proporcionalmente); no es un cobro.
-- **Copias de seguridad**: diaria automática (se guardan 14), manual y preventiva antes de restaurar; descarga en JSON. **Incluyen la lista de espera y los estados de mesa.** La restauración se verifica antes y se bloquea si hay cuentas abiertas o si se perderían facturas emitidas.
+- **Copias de seguridad**: diaria automática (se guardan 14), manual y preventiva antes de restaurar; descarga en JSON. **Copia externa** opcional en Supabase Storage u otro almacenamiento S3 (31 días + una mensual permanente). **Incluyen la lista de espera y los estados de mesa.** La restauración se verifica antes y se bloquea si hay cuentas abiertas o si se perderían facturas emitidas.
 - **Idiomas de la carta**: inglés, francés, alemán, italiano, portugués y ruso, con selector en la carta del cliente (detecta el idioma del teléfono). Traducción manual en la ficha del producto o automática con DeepL si se configura `DEEPL_API_KEY`.
 
 ### Fase 4 · Pagos online y WhatsApp
@@ -95,7 +95,7 @@ Direcciones: `/gestion` (panel), `/personal` (PDA), `/carta/<código-de-mesa>` (
 ## Pruebas
 
 ```bash
-npm test                    # 74 pruebas de integración contra PostgreSQL (base loryand_test)
+npm test                    # 78 pruebas de integración contra PostgreSQL (base loryand_test)
 node e2e/servicio-completo.cjs /tmp/capturas   # servicio completo en navegador real
 node e2e/fase2.cjs /tmp/capturas               # lista de espera, reservas, menú y factura completa
 node e2e/fase3.cjs /tmp/capturas               # plano, almacén, cupones, idiomas, copias y tarjeta

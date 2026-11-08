@@ -7,6 +7,7 @@ import { setIo } from './realtime.js';
 import { sql } from './db.js';
 import { bootstrap } from './bootstrap.js';
 import { saveBackup } from './services/backups.js';
+import { retryPendingUploads, uploadBackup } from './services/offsite.js';
 import { sendDueReminders } from './services/messaging.js';
 
 const applied = await migrate();
@@ -43,7 +44,12 @@ async function dailyBackups() {
   try {
     const due = await sql`select e.id from establishments e where e.active and not exists (
       select 1 from backups b where b.establishment_id = e.id and b.kind = 'daily' and b.created_at > now() - interval '24 hours')`;
-    for (const e of due) await saveBackup(sql, e.id, 'daily');
+    for (const e of due) {
+      const b = await saveBackup(sql, e.id, 'daily');
+      // Copia externa (Supabase Storage u otro S3): si falla, se reintenta en la siguiente pasada.
+      await uploadBackup(b.id);
+    }
+    await retryPendingUploads();
     if (due.length) app.log.info(`Copias diarias creadas: ${due.length}`);
   } catch (err) {
     app.log.error({ err }, 'Error en la copia diaria');

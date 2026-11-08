@@ -6,6 +6,7 @@ import { forbidden, notFound } from '../errors.js';
 import { parse } from '../validate.js';
 import { audit } from '../services/audit.js';
 import { checkRestore, restore, saveBackup, summarize, validateFormat } from '../services/backups.js';
+import { offsiteConfig, testOffsite, uploadBackup } from '../services/offsite.js';
 
 /** Solo el administrador del local o el gestor general. */
 function requireAdmin(req: FastifyRequest) {
@@ -18,7 +19,9 @@ function requireAdmin(req: FastifyRequest) {
 export default async function backupRoutes(app: FastifyInstance) {
   app.get('/api/backups', async (req) => {
     requireAdmin(req);
-    return sql`select id, kind, size_bytes, summary, created_at from backups where establishment_id = ${establishmentOf(req)} order by created_at desc`;
+    const list = await sql`select id, kind, size_bytes, summary, created_at, offsite_key, offsite_at, offsite_error from backups where establishment_id = ${establishmentOf(req)} order by created_at desc`;
+    const cfg = offsiteConfig();
+    return { offsite: cfg ? { configured: true, bucket: cfg.bucket, host: new URL(cfg.endpoint).host } : { configured: false }, backups: list };
   });
 
   app.post('/api/backups', async (req) => {
@@ -26,7 +29,21 @@ export default async function backupRoutes(app: FastifyInstance) {
     const est = establishmentOf(req);
     const b = await saveBackup(sql, est, 'manual');
     await sql.begin((tx) => audit(tx, est, actorLabel(a), 'backup.create', { id: b.id }));
-    return b;
+    const up = await uploadBackup(b.id);
+    return { ...b, offsite: up };
+  });
+
+  app.post('/api/backups/offsite-test', async (req) => {
+    requireAdmin(req);
+    return testOffsite();
+  });
+
+  app.post('/api/backups/:id/upload', async (req) => {
+    requireAdmin(req);
+    const { id } = parse(z.object({ id: z.string().uuid() }), req.params);
+    const [b] = await sql`select id from backups where id = ${id} and establishment_id = ${establishmentOf(req)}`;
+    if (!b) throw notFound('Copia');
+    return uploadBackup(id);
   });
 
   app.get('/api/backups/:id/download', async (req, reply) => {
@@ -70,6 +87,7 @@ export default async function backupRoutes(app: FastifyInstance) {
       await audit(tx, est, actorLabel(a), 'backup.restore', { from: data.createdAt, preventive: p.id });
       return p;
     });
+    await uploadBackup(preventive.id);
     return { ok: true, preventiveBackupId: preventive.id };
   });
 }

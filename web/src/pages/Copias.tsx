@@ -12,10 +12,11 @@ const LABEL: Record<string, string> = {
 /** Copias de seguridad y restauración (capítulo 25). */
 export default function Copias() {
   const [list, setList] = useState<any[]>([]);
+  const [offsite, setOffsite] = useState<{ configured: boolean; bucket?: string; host?: string } | null>(null);
   const [check, setCheck] = useState<{ source: any; summary: any; problems: string[] } | null>(null);
   const { busy, error, run } = useAction();
   const toast = useToast();
-  const load = useCallback(() => { api('/api/backups').then(setList).catch(() => {}); }, []);
+  const load = useCallback(() => { api('/api/backups').then((r) => { setList(r.backups); setOffsite(r.offsite); }).catch(() => {}); }, []);
   useEffect(load, [load]);
 
   const verify = (source: any) => run(async () => { const r = await api('/api/backups/verify', { body: source }); setCheck({ source, ...r }); });
@@ -37,17 +38,32 @@ export default function Copias() {
   return (
     <div className="stack" style={{ maxWidth: 960 }}>
       <div className="spread"><h1>Copias de seguridad</h1>
-        <button className="btn primary" disabled={busy} onClick={() => run(async () => { await api('/api/backups', { body: {} }); toast('Copia creada'); load(); })}>Crear copia ahora</button></div>
+        <button className="btn primary" disabled={busy} onClick={() => run(async () => {
+          const b = await api('/api/backups', { body: {} });
+          toast(b.offsite?.ok ? 'Copia creada y guardada también fuera del servidor' : 'Copia creada'); load();
+        })}>Crear copia ahora</button></div>
+      <div className={`notice ${offsite?.configured ? 'ok' : ''}`}>
+        {offsite?.configured ? (
+          <div className="spread"><span><strong>Copia externa activa</strong> · cada copia se guarda también en <code>{offsite.bucket}</code> ({offsite.host}): los últimos 31 días y una copia mensual permanente.</span>
+            <button className="btn small" disabled={busy} onClick={() => run(async () => { const r = await api('/api/backups/offsite-test', { body: {} }); toast(r.ok ? 'Conexión correcta con el almacenamiento externo' : `Error: ${r.error}`); })}>Probar conexión</button></div>
+        ) : (
+          <span><strong>Sin copia externa.</strong> Las copias se guardan en la misma base de datos del programa: si se perdiera, se perderían con ella. Configura el almacenamiento externo (Supabase Storage) en el servidor; los pasos están en PUBLICAR.md.</span>
+        )}
+      </div>
       <p className="small muted">Se hace una copia automática cada día y se conservan las 14 últimas. La copia incluye carta, mesas, camareros, ventas, documentos, reservas, <strong>lista de espera y estados de mesa</strong>, almacén y fidelización. No incluye los usuarios del panel ni sus contraseñas, ni claves de servicios externos. Descarga periódicamente una copia y guárdala fuera del programa.</p>
       <ErrorText error={error} />
       <div className="card" style={{ overflowX: 'auto' }}>
         <table className="list">
-          <thead><tr><th>Fecha</th><th>Tipo</th><th>Contenido</th><th>Tamaño</th><th></th></tr></thead>
+          <thead><tr><th>Fecha</th><th>Tipo</th><th>Contenido</th><th>Tamaño</th><th>Fuera del servidor</th><th></th></tr></thead>
           <tbody>{list.map((b) => (
             <tr key={b.id}>
               <td>{dateTime(b.created_at)}</td><td>{KIND[b.kind]}</td>
               <td className="small">{b.summary.counts.documents} documentos · {b.summary.counts.orders} pedidos · {b.summary.counts.waitlist} en lista de espera</td>
               <td className="small">{Math.round(b.size_bytes / 1024)} KB</td>
+              <td className="small">{b.offsite_key ? <span className="badge" title={b.offsite_key}>Guardada</span>
+                : b.offsite_error ? <span className="badge danger" title={b.offsite_error}>Error</span>
+                : <span className="badge grey">{offsite?.configured ? 'Pendiente' : 'No'}</span>}
+                {offsite?.configured && !b.offsite_key && <button className="btn small ghost" disabled={busy} onClick={() => run(async () => { const r = await api(`/api/backups/${b.id}/upload`, { body: {} }); toast(r.ok ? 'Subida correctamente' : `Error: ${r.error}`); load(); })}>Subir</button>}</td>
               <td className="right"><div className="row" style={{ gap: '.3rem', justifyContent: 'flex-end' }}>
                 <button className="btn small" onClick={() => download(b.id)}>Descargar</button>
                 <button className="btn small ghost" disabled={busy} onClick={() => verify({ backupId: b.id })}>Restaurar…</button>
