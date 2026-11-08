@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { api } from '../lib/api';
 import { ZONE_LABEL } from '../lib/format';
 import { useSession } from '../lib/session';
+import { labelsHtml } from '../lib/labels';
 import { ErrorText, Modal, useAction } from '../components/ui';
 
 interface Table { id: string; label: string; zone: string; seats: number; active: boolean; qr_token: string; join_group: string | null }
@@ -60,18 +61,37 @@ export default function Mesas() {
 }
 
 function QrLabels({ tables, onClose }: { tables: Table[]; onClose: () => void }) {
-  const { me } = useSession();
+  const { me, refresh } = useSession();
   const [selected, setSelected] = useState<string[]>(tables.map((t) => t.id));
   const [copies, setCopies] = useState(1);
+  const [name, setName] = useState(me?.establishment?.name ?? '');
+  const [tagline, setTagline] = useState<string>((me?.establishment?.settings as Record<string, unknown> | undefined)?.labelTagline as string ?? '');
   const [images, setImages] = useState<Record<string, string>>({});
+  const frame = useRef<HTMLIFrameElement>(null);
+  const { error, run } = useAction();
   useEffect(() => {
-    Promise.all(tables.map(async (t) => [t.id, await QRCode.toDataURL(tableUrl(t.qr_token), { margin: 1, width: 360 })] as const))
+    // QR con corrección de errores media y buena resolución para imprimir nítido a 3 cm.
+    Promise.all(tables.map(async (t) => [t.id, await QRCode.toDataURL(tableUrl(t.qr_token), { margin: 3, width: 600, errorCorrectionLevel: 'M', color: { dark: '#111111', light: '#ffffff' } })] as const))
       .then((pairs) => setImages(Object.fromEntries(pairs)));
   }, [tables]);
-  const chosen = tables.filter((t) => selected.includes(t.id));
+  const chosen = tables.filter((t) => selected.includes(t.id) && images[t.id]);
+  const html = useMemo(() => labelsHtml(
+    chosen.flatMap((t) => Array.from({ length: copies }, () => ({ table: t.label, qr: images[t.id] }))),
+    { establishment: name || 'Mi restaurante', tagline },
+  ), [chosen, copies, images, name, tagline]);
+  const sheets = Math.ceil((chosen.length * copies) / 8);
+  const saveTagline = () => run(async () => {
+    if (tagline === ((me?.establishment?.settings as Record<string, unknown> | undefined)?.labelTagline ?? '')) return;
+    await api('/api/admin/establishment', { method: 'PUT', body: { settings: { labelTagline: tagline } } });
+    await refresh();
+  });
   return (
-    <Modal title="Etiquetas QR" onClose={onClose}>
-      <p className="small muted">Imprime una prueba, mide el resultado y escanea cada etiqueta antes de colocarla.</p>
+    <Modal title="Etiquetas de mesa (QR + NFC)" onClose={onClose}>
+      <p className="small muted">8 etiquetas por hoja A4. Imprime una prueba, mide el resultado y escanea cada etiqueta antes de colocarla. Para el NFC, graba en cada pegatina el enlace de su mesa («Copiar (para NFC)»).</p>
+      <div className="grid cols-2" style={{ gridTemplateColumns: '1fr 1fr' }}>
+        <label>Nombre en la etiqueta<input value={name} onChange={(e) => setName(e.target.value)} maxLength={28} /></label>
+        <label>Lema (opcional)<input value={tagline} onChange={(e) => setTagline(e.target.value)} onBlur={saveTagline} maxLength={48} placeholder="TAPAS · COCINA · ENCUENTRO" /></label>
+      </div>
       <div className="row" style={{ marginBottom: '.5rem' }}>
         {tables.map((t) => (
           <label key={t.id} className="check" style={{ margin: 0 }}>
@@ -79,18 +99,13 @@ function QrLabels({ tables, onClose }: { tables: Table[]; onClose: () => void })
           </label>
         ))}
       </div>
-      <label>Copias por mesa (1 a 10)<input type="number" min={1} max={10} value={copies} onChange={(e) => setCopies(Math.min(10, Math.max(1, Number(e.target.value))))} /></label>
-      <button className="btn primary block" onClick={() => window.print()}>Imprimir</button>
-      <div className="printable" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 12, marginTop: 12 }}>
-        {chosen.flatMap((t) => Array.from({ length: copies }, (_, i) => (
-          <div key={`${t.id}-${i}`} style={{ border: '1px solid #ccc', borderRadius: 8, padding: 8, textAlign: 'center', background: '#fff', color: '#000', breakInside: 'avoid' }}>
-            <div style={{ fontWeight: 700 }}>{me?.establishment?.name}</div>
-            {images[t.id] && <img src={images[t.id]} alt={`QR mesa ${t.label}`} style={{ width: '100%' }} />}
-            <div style={{ fontSize: 20, fontWeight: 800 }}>Mesa {t.label}</div>
-            <div style={{ fontSize: 11 }}>Escanea para ver la carta y pedir</div>
-          </div>
-        )))}
+      <div className="row">
+        <label style={{ margin: 0 }}>Copias por mesa (1 a 10)<input type="number" min={1} max={10} value={copies} onChange={(e) => setCopies(Math.min(10, Math.max(1, Number(e.target.value))))} style={{ width: 90 }} /></label>
+        <span className="small muted">{chosen.length * copies} etiquetas · {sheets} hoja(s)</span>
       </div>
+      <ErrorText error={error} />
+      <button className="btn primary block mt" disabled={!chosen.length} onClick={() => frame.current?.contentWindow?.print()}>Imprimir etiquetas</button>
+      <iframe ref={frame} title="Vista previa de etiquetas" srcDoc={html} style={{ width: '100%', height: '60vh', border: '1px solid var(--line)', borderRadius: 8, marginTop: 12, background: '#fff' }} />
     </Modal>
   );
 }

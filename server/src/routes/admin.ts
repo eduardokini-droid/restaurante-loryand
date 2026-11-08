@@ -33,6 +33,7 @@ const establishmentSchema = z.object({
   settings: z.object({
     sharedTables: z.boolean(),
     blockPaymentUntilDelivered: z.boolean(),
+    labelTagline: z.string().max(48),
   }).partial(),
 }).partial();
 
