@@ -3,7 +3,7 @@
  * Se genera un documento HTML independiente que se muestra en vista previa y se imprime tal cual.
  */
 export interface LabelData { table: string; qr: string }
-export interface LabelOptions { establishment: string; tagline: string }
+export interface LabelOptions { establishment: string; tagline: string; cropMarks?: boolean }
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 
@@ -42,11 +42,14 @@ const nfc = `
   </g>
 </svg>`;
 
+/** Marcas de corte en las cuatro esquinas, fuera de la etiqueta, alineadas con sus bordes. */
+const MARKS = ['tl-h', 'tl-v', 'tr-h', 'tr-v', 'bl-h', 'bl-v', 'br-h', 'br-v'].map((c) => `<i class="mk ${c}"></i>`).join('');
+
 function card(l: LabelData, o: LabelOptions): string {
   const n = esc(l.table);
   const numSize = n.length <= 2 ? 15 : n.length === 3 ? 11 : 8;
   return `
-  <div class="card">
+  <div class="card">${o.cropMarks === false ? '' : MARKS}
     <div class="side">
       <div class="logo">${logo}</div>
       <div class="brand">LORYAND</div>
@@ -73,10 +76,19 @@ function card(l: LabelData, o: LabelOptions): string {
 export function labelsHtml(labels: LabelData[], o: LabelOptions): string {
   return `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Etiquetas de mesa · ${esc(o.establishment)}</title>
 <style>
-  @page { size: A4; margin: 8mm 9mm; }
+  @page { size: A4; margin: 7mm; }
   * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   html, body { margin: 0; background: #fff; font-family: "Helvetica Neue", Arial, "DejaVu Sans", sans-serif; }
-  .sheet { display: grid; grid-template-columns: 94mm 94mm; column-gap: 4mm; row-gap: 3.5mm; justify-content: center; padding: 0; }
+  /* Separación suficiente para que las marcas de corte de etiquetas vecinas no se toquen. */
+  .sheet { display: grid; grid-template-columns: 94mm 94mm; column-gap: 6mm; row-gap: 5mm; justify-content: center; padding: 0; }
+  .mk { position: absolute; background: #3a3a3a; display: block; }
+  .mk[class*="-h"] { width: 1.8mm; height: .15mm; }
+  .mk[class*="-v"] { width: .15mm; height: 1.8mm; }
+  /* Cada marca prolonga el borde de la etiqueta (alineada con él) y empieza a 0,6 mm de la esquina. */
+  .tl-h { top: -.075mm; left: -2.4mm; } .tl-v { top: -2.4mm; left: -.075mm; }
+  .tr-h { top: -.075mm; right: -2.4mm; } .tr-v { top: -2.4mm; right: -.075mm; }
+  .bl-h { bottom: -.075mm; left: -2.4mm; } .bl-v { bottom: -2.4mm; left: -.075mm; }
+  .br-h { bottom: -.075mm; right: -2.4mm; } .br-v { bottom: -2.4mm; right: -.075mm; }
   .card { width: 94mm; height: 66mm; border: .7mm solid ${C.border}; border-radius: 3.2mm; padding: 1.4mm; background: #fff; display: flex; break-inside: avoid; page-break-inside: avoid; position: relative; }
   .card::before { content: ""; position: absolute; inset: 1.4mm; border: .35mm solid ${C.goldSoft}; border-radius: 2.2mm; pointer-events: none; }
   .side { width: 29mm; flex: none; background: ${C.green}; border-radius: 2mm 0 0 2mm; color: #fbf6ea; display: flex; flex-direction: column; align-items: center; padding: 3mm 2mm 2.6mm; }

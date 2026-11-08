@@ -64,6 +64,7 @@ function QrLabels({ tables, onClose }: { tables: Table[]; onClose: () => void })
   const { me, refresh } = useSession();
   const [selected, setSelected] = useState<string[]>(tables.map((t) => t.id));
   const [copies, setCopies] = useState(1);
+  const [marks, setMarks] = useState(true);
   const [name, setName] = useState(me?.establishment?.name ?? '');
   const [tagline, setTagline] = useState<string>((me?.establishment?.settings as Record<string, unknown> | undefined)?.labelTagline as string ?? '');
   const [images, setImages] = useState<Record<string, string>>({});
@@ -77,8 +78,8 @@ function QrLabels({ tables, onClose }: { tables: Table[]; onClose: () => void })
   const chosen = tables.filter((t) => selected.includes(t.id) && images[t.id]);
   const html = useMemo(() => labelsHtml(
     chosen.flatMap((t) => Array.from({ length: copies }, () => ({ table: t.label, qr: images[t.id] }))),
-    { establishment: name || 'Mi restaurante', tagline },
-  ), [chosen, copies, images, name, tagline]);
+    { establishment: name || 'Mi restaurante', tagline, cropMarks: marks },
+  ), [chosen, copies, images, name, tagline, marks]);
   const sheets = Math.ceil((chosen.length * copies) / 8);
   const saveTagline = () => run(async () => {
     if (tagline === ((me?.establishment?.settings as Record<string, unknown> | undefined)?.labelTagline ?? '')) return;
@@ -87,7 +88,7 @@ function QrLabels({ tables, onClose }: { tables: Table[]; onClose: () => void })
   });
   return (
     <Modal title="Etiquetas de mesa (QR + NFC)" onClose={onClose}>
-      <p className="small muted">8 etiquetas por hoja A4. Imprime una prueba, mide el resultado y escanea cada etiqueta antes de colocarla. Para el NFC, graba en cada pegatina el enlace de su mesa («Copiar (para NFC)»).</p>
+      <p className="small muted">8 etiquetas por hoja A4 adhesiva, para recortar a mano siguiendo las marcas de las esquinas. Imprime al 100 % (tamaño real) con «gráficos de fondo» activado, mide una prueba y escanea cada etiqueta antes de colocarla. Para el NFC, graba en cada pegatina el enlace de su mesa («Copiar (para NFC)»).</p>
       <div className="grid cols-2" style={{ gridTemplateColumns: '1fr 1fr' }}>
         <label>Nombre en la etiqueta<input value={name} onChange={(e) => setName(e.target.value)} maxLength={28} /></label>
         <label>Lema (opcional)<input value={tagline} onChange={(e) => setTagline(e.target.value)} onBlur={saveTagline} maxLength={48} placeholder="TAPAS · COCINA · ENCUENTRO" /></label>
@@ -101,6 +102,7 @@ function QrLabels({ tables, onClose }: { tables: Table[]; onClose: () => void })
       </div>
       <div className="row">
         <label style={{ margin: 0 }}>Copias por mesa (1 a 10)<input type="number" min={1} max={10} value={copies} onChange={(e) => setCopies(Math.min(10, Math.max(1, Number(e.target.value))))} style={{ width: 90 }} /></label>
+        <label className="check" style={{ margin: 0 }}><input type="checkbox" checked={marks} onChange={(e) => setMarks(e.target.checked)} /> Marcas de corte</label>
         <span className="small muted">{chosen.length * copies} etiquetas · {sheets} hoja(s)</span>
       </div>
       <ErrorText error={error} />
