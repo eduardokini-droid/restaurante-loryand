@@ -30,9 +30,11 @@ const TABLES: Array<{ name: string; where: string }> = [
   { name: 'order_items', where: 'order_id in (select id from orders where establishment_id = $1)' },
   { name: 'payments', where: 'establishment_id = $1' },
   { name: 'documents', where: 'establishment_id = $1' },
+  { name: 'online_payments', where: 'establishment_id = $1' },
   { name: 'service_requests', where: 'establishment_id = $1' },
   { name: 'stock_movements', where: 'establishment_id = $1' },
   { name: 'audit_log', where: 'establishment_id = $1' },
+  { name: 'message_log', where: 'establishment_id = $1' },
 ];
 const ESTABLISHMENT_FIELDS = ['name', 'legal_name', 'tax_id', 'phone', 'email', 'address', 'postal_code', 'city', 'province', 'settings'];
 

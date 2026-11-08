@@ -8,6 +8,7 @@ import { notify } from '../realtime.js';
 import { audit } from '../services/audit.js';
 import { setPhysicalState } from '../services/tables.js';
 import { averageStay, loadUnits, propose, type WaitGroup } from '../services/waitlist.js';
+import { sendMessage } from '../services/messaging.js';
 
 /** La lista de espera se usa desde el plano, las reservas y la PDA. */
 function requireWaitlist(req: FastifyRequest): Actor {
@@ -64,9 +65,9 @@ export default async function waitlistRoutes(app: FastifyInstance) {
     const est = establishmentOf(req);
     const { id: gid } = parse(id, req.params);
     const { tableIds } = parse(z.object({ tableIds: z.array(z.string().uuid()).min(1) }), req.body);
-    await sql.begin(async (tx) => {
+    const result = await sql.begin(async (tx) => {
       await tx`select id from establishments where id = ${est} for update`;
-      const [g] = await tx`select status, party_size from waitlist where id = ${gid} and establishment_id = ${est} for update`;
+      const [g] = await tx`select status, party_size, name, phone from waitlist where id = ${gid} and establishment_id = ${est} for update`;
       if (!g) throw notFound('Grupo');
       if (g.status !== 'waiting') throw conflict('not_waiting', 'Este grupo ya no está esperando');
       const units = await loadUnits(tx, est);
@@ -76,9 +77,15 @@ export default async function waitlistRoutes(app: FastifyInstance) {
       if (unit.seats < g.party_size) throw conflict('too_small', `La mesa tiene ${unit.seats} plazas y el grupo es de ${g.party_size}`);
       await tx`update waitlist set status = 'notified', table_ids = ${tableIds}, notified_at = now() where id = ${gid}`;
       await audit(tx, est, actorLabel(a), 'waitlist.assign', { id: gid, tableIds });
+      return { name: g.name as string, phone: g.phone as string, labels: unit.labels };
+    }).then(async (x) => {
+      notify(est, ['tables']);
+      if (!x.phone) return { ok: true, message: null };
+      const [e] = await sql`select name from establishments where id = ${est}`;
+      const message = await sendMessage(est, 'waitlist_ready', x.phone, { name: x.name, establishment: e.name, table: x.labels.length > 1 ? `mesas ${x.labels.join('+')}` : `mesa ${x.labels[0]}` }, { waitlistId: gid });
+      return { ok: true, message };
     });
-    notify(est, ['tables']);
-    return { ok: true };
+    return result;
   });
 
   app.post('/api/waitlist/:id/seat', async (req) => {

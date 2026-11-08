@@ -33,9 +33,12 @@ export default async function reportRoutes(app: FastifyInstance) {
       from accounts a left join tables t on t.id = a.table_id
       where a.establishment_id = ${est} and a.status = 'open'
       order by a.opened_at`;
+    const onlineConflicts = await sql`select op.order_code, op.amount_cents, op.error, op.updated_at from online_payments op
+      where op.establishment_id = ${est} and op.status = 'conflict' order by op.updated_at desc`;
     const total = byMethod.reduce((s, r) => s + r.total_cents, 0);
     return {
       period: q, totalCents: total, byMethod, byWaiter, documents,
+      onlineConflicts,
       pending: pending.filter((p) => p.pending_cents > 0),
       pendingCents: pending.reduce((s, p) => s + Math.max(0, p.pending_cents), 0),
     };

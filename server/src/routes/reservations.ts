@@ -8,6 +8,13 @@ import { notify } from '../realtime.js';
 import { checkLimit, recordFailure } from '../ratelimit.js';
 import { audit } from '../services/audit.js';
 import { setPhysicalState } from '../services/tables.js';
+import { sendMessage, type SendResult } from '../services/messaging.js';
+
+async function confirmationMessage(est: string, r: Record<string, any>): Promise<SendResult | null> {
+  if (!r.phone) return null;
+  const [x] = await sql`select e.name, to_char(${r.starts_at}::timestamptz at time zone ${TZ}, 'DD/MM') as date, to_char(${r.starts_at}::timestamptz at time zone ${TZ}, 'HH24:MI') as time from establishments e where e.id = ${est}`;
+  return sendMessage(est, 'reservation_confirmed', r.phone, { name: r.name, establishment: x.name, party: r.party_size, date: x.date, time: x.time }, { reservationId: r.id });
+}
 
 export const TZ = 'Europe/Madrid';
 
@@ -140,7 +147,8 @@ export default async function reservationRoutes(app: FastifyInstance) {
       return row;
     });
     notify(est, ['tables']);
-    return r;
+    const message = r.status === 'confirmed' ? await confirmationMessage(est, r) : null;
+    return { ...r, message };
   });
 
   app.patch('/api/reservations/:id', async (req) => {
@@ -180,10 +188,11 @@ export default async function reservationRoutes(app: FastifyInstance) {
         for (const t of tableIds) await setPhysicalState(tx, t, 'occupied');
       }
       await audit(tx, est, actorLabel(a), 'reservation.update', { id, ...b });
-      return row;
+      return { row, wasConfirmed: cur.status === 'confirmed' };
     });
     notify(est, ['tables']);
-    return r;
+    const message = r.row.status === 'confirmed' && !r.wasConfirmed ? await confirmationMessage(est, r.row) : null;
+    return { ...r.row, message };
   });
 
   // ---------- Formulario público ----------

@@ -7,6 +7,7 @@ import { setIo } from './realtime.js';
 import { sql } from './db.js';
 import { bootstrap } from './bootstrap.js';
 import { saveBackup } from './services/backups.js';
+import { sendDueReminders } from './services/messaging.js';
 
 const applied = await migrate();
 if (applied.length) console.log('Migraciones aplicadas:', applied.join(', '));
@@ -49,4 +50,6 @@ async function dailyBackups() {
   }
 }
 setTimeout(dailyBackups, 60_000);
+// Recordatorios de reserva por WhatsApp (modo automático), cada 10 minutos.
+setInterval(() => { sendDueReminders().catch((err) => app.log.error({ err }, 'Error en recordatorios')); }, 600_000);
 setInterval(dailyBackups, 3600_000);

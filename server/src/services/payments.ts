@@ -25,8 +25,14 @@ export interface PaymentResult {
  *  - nunca se cobra más de lo pendiente;
  *  - opcionalmente, no se cobra con productos sin entregar.
  */
+export interface PaymentOptions {
+  /** Cobro confirmado por el banco: el dinero ya está cobrado, no se bloquea por platos sin entregar ni por el QR en curso. */
+  bankConfirmed?: boolean;
+}
+
 export async function registerPayment(
   establishmentId: string, accountId: string, input: PaymentInput, by: { waiterId: string | null; userId: string | null },
+  opts: PaymentOptions = {},
 ): Promise<PaymentResult> {
   return sql.begin(async (tx) => {
     await tx`select id from establishments where id = ${establishmentId} for update`;
@@ -46,7 +52,13 @@ export async function registerPayment(
     if (s.totalCents === 0) throw conflict('empty_account', 'La cuenta no tiene consumiciones');
 
     const [est] = await tx`select settings from establishments where id = ${establishmentId}`;
-    if (est.settings?.blockPaymentUntilDelivered && s.undeliveredCount > 0) {
+    if (!opts.bankConfirmed) {
+      // Un pago online en curso bloquea el cobro manual para no cobrar dos veces (capítulo 17).
+      const [online] = await tx`select amount_cents from online_payments where account_id = ${accountId}
+                                and status in ('pending','processing') and created_at > now() - interval '20 minutes'`;
+      if (online) throw conflict('online_pending', `Hay un pago online de ${(online.amount_cents / 100).toFixed(2)} € en curso. Espera la confirmación del banco o retira el QR antes de cobrar.`);
+    }
+    if (!opts.bankConfirmed && est.settings?.blockPaymentUntilDelivered && s.undeliveredCount > 0) {
       throw conflict('items_pending', `Quedan ${s.undeliveredCount} producto(s) sin entregar. Márcalos como entregados antes de cobrar.`);
     }
     if (input.amountCents > s.pendingCents) {
