@@ -14,6 +14,7 @@ const TABLES: Array<{ name: string; where: string }> = [
   { name: 'categories', where: 'establishment_id = $1' },
   { name: 'products', where: 'establishment_id = $1' },
   { name: 'tables', where: 'establishment_id = $1' },
+  { name: 'printers', where: 'establishment_id = $1' },
   { name: 'waiter_tables', where: 'waiter_id in (select id from waiters where establishment_id = $1)' },
   { name: 'shifts', where: 'waiter_id in (select id from waiters where establishment_id = $1)' },
   { name: 'daily_menus', where: 'establishment_id = $1' },

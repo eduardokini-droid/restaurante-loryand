@@ -11,6 +11,7 @@ import { createOrder, fireNextCourse, orderInput, setItemsStatus } from '../serv
 import { paymentInput, registerPayment } from '../services/payments.js';
 import { convertToFull, issueDocument } from '../services/documents.js';
 import { setPhysicalState } from '../services/tables.js';
+import { autoPrintTicket, printFire, printOrder } from '../services/printing.js';
 
 const id = z.object({ id: z.string().uuid() });
 const who = (a: Actor) => ({ waiterId: a.kind === 'waiter' ? a.id : null, userId: a.kind === 'user' ? a.id : null });
@@ -140,7 +141,11 @@ export default async function serviceRoutes(app: FastifyInstance) {
       waiterId = w.id;
     }
     const r = await createOrder(input, { establishmentId: est, source: a.kind === 'waiter' ? 'pda' : 'tpv', waiterId, userId: a.kind === 'user' ? a.id : null });
-    if (!r.duplicate) notify(est, ['orders', 'tables'], await tableTokenOfAccount(r.accountId));
+    if (!r.duplicate) {
+      notify(est, ['orders', 'tables'], await tableTokenOfAccount(r.accountId));
+      // La impresión nunca debe impedir registrar la comanda.
+      await printOrder(est, r.orderId).catch((err) => req.log.error({ err }, 'Error al preparar la comanda impresa'));
+    }
     return r;
   });
 
@@ -159,7 +164,10 @@ export default async function serviceRoutes(app: FastifyInstance) {
     if (!acc) throw notFound('Cuenta');
     await checkTableAccess(a, est, acc.table_id);
     const r = await registerPayment(est, aid, parse(paymentInput, req.body), who(a));
-    if (!r.duplicate) notify(est, ['payments', 'tables', 'requests'], await tableTokenOfAccount(aid));
+    if (!r.duplicate) {
+      notify(est, ['payments', 'tables', 'requests'], await tableTokenOfAccount(aid));
+      if (r.documentId) await autoPrintTicket(est, r.documentId).catch((err) => req.log.error({ err }, 'Error al preparar el ticket impreso'));
+    }
     return r;
   });
 
@@ -171,6 +179,7 @@ export default async function serviceRoutes(app: FastifyInstance) {
     const course = await fireNextCourse(est, aid);
     if (course == null) throw conflict('nothing_held', 'No hay pases pendientes de marchar');
     await sql.begin((tx) => audit(tx, est, actorLabel(a), 'course.fire', { accountId: aid, course }));
+    await printFire(est, aid, course).catch((err) => req.log.error({ err }, 'Error al imprimir la marcha'));
     notify(est, ['orders', 'tables']);
     return { course };
   });

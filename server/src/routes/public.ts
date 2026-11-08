@@ -7,6 +7,7 @@ import { notify } from '../realtime.js';
 import { checkLimit, recordFailure } from '../ratelimit.js';
 import { createOrder, orderInput } from '../services/orders.js';
 import { accountSummary } from '../services/accounts.js';
+import { printOrder } from '../services/printing.js';
 
 const token = z.object({ token: z.string().min(10).max(64) });
 
@@ -64,7 +65,10 @@ export default async function publicRoutes(app: FastifyInstance) {
       { clientRequestId: body.clientRequestId, items: body.items, note: body.note, target: { tableId: t.id } },
       { establishmentId: t.establishment_id, source: 'client', waiterId: null, userId: null },
     );
-    if (!r.duplicate) notify(t.establishment_id, ['orders', 'tables'], t.qr_token);
+    if (!r.duplicate) {
+      notify(t.establishment_id, ['orders', 'tables'], t.qr_token);
+      await printOrder(t.establishment_id, r.orderId).catch((err) => req.log.error({ err }, 'Error al preparar la comanda impresa'));
+    }
     return { number: r.number, duplicate: r.duplicate };
   });
 

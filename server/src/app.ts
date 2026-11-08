@@ -20,6 +20,7 @@ import stockRoutes from './routes/stock.js';
 import loyaltyRoutes from './routes/loyalty.js';
 import backupRoutes from './routes/backups.js';
 import integrationRoutes from './routes/integrations.js';
+import printingRoutes from './routes/printing.js';
 
 export async function buildApp(opts: { logger?: boolean } = {}) {
   const app = Fastify({ logger: opts.logger ?? false, trustProxy: true, bodyLimit: 1_000_000 });
@@ -51,6 +52,7 @@ export async function buildApp(opts: { logger?: boolean } = {}) {
   await app.register(loyaltyRoutes);
   await app.register(backupRoutes);
   await app.register(integrationRoutes);
+  await app.register(printingRoutes);
 
   // En producción el servidor sirve también la aplicación web compilada.
   const webDist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../web/dist');
