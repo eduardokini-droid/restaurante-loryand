@@ -5,9 +5,11 @@ import { migrate } from './migrate.js';
 import { actorFromToken, COOKIE } from './auth.js';
 import { setIo } from './realtime.js';
 import { sql } from './db.js';
+import { bootstrap } from './bootstrap.js';
 
 const applied = await migrate();
 if (applied.length) console.log('Migraciones aplicadas:', applied.join(', '));
+await bootstrap((m) => console.log(m));
 
 const app = await buildApp({ logger: true });
 const io = new Server(app.server, { path: '/socket.io', serveClient: false });

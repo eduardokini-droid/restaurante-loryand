@@ -1,0 +1,35 @@
+# Configuración de Render (Blueprint): crea el servidor web y la base de datos PostgreSQL.
+# Al aplicar el Blueprint, Render pedirá BOOTSTRAP_ADMIN_PASSWORD (mínimo 12 caracteres).
+services:
+  - type: web
+    name: restaurante-loryand
+    runtime: node
+    plan: starter
+    region: frankfurt
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: loryand-db
+          property: connectionString
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: BOOTSTRAP_ADMIN_USER
+        value: gestor
+      - key: BOOTSTRAP_ADMIN_PASSWORD
+        sync: false
+      # Crea el local de demostración "demo" para probar. Ponlo a "false" cuando no lo necesites.
+      - key: SEED_DEMO
+        value: "true"
+
+databases:
+  - name: loryand-db
+    plan: basic-256mb
+    region: frankfurt
+    databaseName: loryand
+    user: loryand
+    postgresMajorVersion: "16"
