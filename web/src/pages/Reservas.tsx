@@ -4,6 +4,7 @@ import { ZONE_LABEL, money, today, toCents } from '../lib/format';
 import { useSession } from '../lib/session';
 import { useLive } from '../lib/realtime';
 import { ErrorText, Modal, useAction, useToast } from '../components/ui';
+import { WhatsAppPrompt, type MessageResult } from '../components/WhatsAppPrompt';
 
 const STATUS: Record<string, [string, string]> = {
   requested: ['Solicitud', 'warn'], confirmed: ['Confirmada', ''], seated: ['Sentados', 'terra'],
@@ -18,6 +19,7 @@ export default function Reservas() {
   const [tables, setTables] = useState<{ id: string; label: string; seats: number; zone: string }[]>([]);
   const [form, setForm] = useState<any | null>(null);
   const [settings, setSettings] = useState(false);
+  const [wa, setWa] = useState<MessageResult | null>(null);
   const { busy, error, run } = useAction();
   const toast = useToast();
   const load = useCallback(() => { api(`/api/reservations?date=${date}`).then(setData).catch(() => {}); }, [date]);
@@ -25,7 +27,11 @@ export default function Reservas() {
   useEffect(() => { api('/api/service/floor').then((f) => setTables(f.tables)).catch(() => {}); }, []);
   useLive(load, ['tables']);
 
-  const patch = (r: any, body: object, msg?: string) => run(async () => { await api(`/api/reservations/${r.id}`, { method: 'PATCH', body }); if (msg) toast(msg); load(); });
+  const patch = (r: any, body: object, msg?: string) => run(async () => {
+    const res = await api(`/api/reservations/${r.id}`, { method: 'PATCH', body });
+    if (msg) toast(res.message?.status === 'sent' ? `${msg}. Aviso enviado por WhatsApp.` : msg);
+    setWa(res.message ?? null); load();
+  });
   const shift = (d: number) => { const x = new Date(date); x.setDate(x.getDate() + d); setDate(x.toISOString().slice(0, 10)); };
   const publicUrl = `${location.origin}/reservar/${me?.establishment?.slug}`;
   const list = data?.reservations ?? [];
@@ -83,21 +89,22 @@ export default function Reservas() {
           </table>
         )}
       </div>
-      <p className="small muted">Los recordatorios por correo o WhatsApp requieren conectar un proveedor: el programa todavía no envía avisos automáticos. El estado «Lista de espera» de la cola presencial es independiente de las reservas.</p>
-      {form && <ReservationForm initial={form} tables={tables} onClose={() => setForm(null)} onDone={() => { setForm(null); load(); }} />}
+      <p className="small muted">Avisos por WhatsApp: se configuran en «Pagos y WhatsApp». En modo enlace, el programa prepara el mensaje y tú lo envías; en modo automático, la confirmación y el recordatorio salen solos. La cola presencial de «Lista de espera» es independiente de las reservas.</p>
+      {form && <ReservationForm initial={form} tables={tables} onClose={() => setForm(null)} onDone={(m) => { setForm(null); setWa(m); load(); }} />}
+      <WhatsAppPrompt result={wa} onClose={() => setWa(null)} />
       {settings && data && <SettingsForm initial={data.settings} onClose={() => setSettings(false)} onDone={() => { setSettings(false); load(); }} />}
     </div>
   );
 }
 
-function ReservationForm({ initial, tables, onClose, onDone }: { initial: any; tables: any[]; onClose: () => void; onDone: () => void }) {
+function ReservationForm({ initial, tables, onClose, onDone }: { initial: any; tables: any[]; onClose: () => void; onDone: (m: MessageResult | null) => void }) {
   const [f, setF] = useState(initial);
   const { busy, error, run } = useAction();
   const toast = useToast();
   const save = () => run(async () => {
     const r = await api('/api/reservations', { body: { ...f, zonePref: f.zonePref || null } });
     toast(r.status === 'requested' && r.deposit_cents > 0 ? `Reserva registrada: pendiente de fianza (${money(r.deposit_cents)})` : 'Reserva confirmada');
-    onDone();
+    onDone(r.message ?? null);
   });
   return (
     <Modal title="Nueva reserva" onClose={onClose}>

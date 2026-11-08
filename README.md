@@ -50,6 +50,17 @@ El manual pedía al personal que vigilara a mano varias cosas. Ahora las garanti
 - **Copias de seguridad**: diaria automática (se guardan 14), manual y preventiva antes de restaurar; descarga en JSON. **Incluyen la lista de espera y los estados de mesa.** La restauración se verifica antes y se bloquea si hay cuentas abiertas o si se perderían facturas emitidas.
 - **Idiomas de la carta**: inglés, francés, alemán, italiano, portugués y ruso, con selector en la carta del cliente (detecta el idioma del teléfono). Traducción manual en la ficha del producto o automática con DeepL si se configura `DEEPL_API_KEY`.
 
+### Fase 4 · Pagos online y WhatsApp
+- **Cobro online con Redsys** (tarjeta y Bizum): desde TPV o PDA, «Cobrar con QR» genera un código con el importe fijado; el cliente paga en la pasarela del banco. También «Pagar mi cuenta» desde la carta de la mesa. Solo la notificación firmada del banco confirma el pago.
+  - Mientras hay un pago online en curso no se puede cobrar a mano (evita cobrar dos veces).
+  - Notificaciones repetidas no duplican; firmas falsas se ignoran.
+  - Si el banco cobra pero la cuenta ya no lo admite (p. ej. se cobró en efectivo), el pago queda **«por revisar»** en Sala y en Caja para devolverlo desde Redsys: nunca se pierde un cobro.
+  - Entorno de pruebas y real; claves cifradas en la base de datos.
+- **Avisos por WhatsApp**: confirmación de reserva, recordatorio (horas antes, una sola vez) y «tu mesa está lista» en la lista de espera.
+  - **Modo enlace** (gratis): abre WhatsApp con el mensaje escrito en el móvil del personal.
+  - **Modo automático** con la API oficial de WhatsApp Business (plantillas aprobadas por Meta).
+  - Registro de avisos enviados, preparados o fallidos.
+
 ## Puesta en marcha
 
 Requisitos: Node.js 22 y PostgreSQL 14 o superior.
@@ -78,10 +89,11 @@ Direcciones: `/gestion` (panel), `/personal` (PDA), `/carta/<código-de-mesa>` (
 ## Pruebas
 
 ```bash
-npm test                    # 53 pruebas de integración contra PostgreSQL (base loryand_test)
+npm test                    # 64 pruebas de integración contra PostgreSQL (base loryand_test)
 node e2e/servicio-completo.cjs /tmp/capturas   # servicio completo en navegador real
 node e2e/fase2.cjs /tmp/capturas               # lista de espera, reservas, menú y factura completa
 node e2e/fase3.cjs /tmp/capturas               # plano, almacén, cupones, idiomas, copias y tarjeta
+node e2e/fase4.cjs /tmp/capturas               # cobro con QR (Redsys simulado) y aviso por WhatsApp
 ```
 
 Las pruebas cubren: comandas duplicadas, opciones obligatorias, pases retenidos, fichaje, modo exclusivo, cuentas de barra,
@@ -90,10 +102,8 @@ estados físicos de la mesa, clave de la carta, límite de intentos, avisos sin 
 
 ## Hoja de ruta
 
-**Fase 4 · Integraciones (requieren contratos y pruebas reales)**
-- Pagos online con Redsys (tarjeta y Bizum) desde el QR de la mesa (cap. 17).
-- **VERI\*FACTU**: envío de registros de facturación a la AEAT con huella encadenada y QR en el ticket. Hay que validarlo con la asesoría antes de la fecha de obligación.
-- Avisos por WhatsApp o SMS para reservas y lista de espera.
-- Impresión directa en impresoras de tickets (ESC/POS) sin el diálogo del navegador.
+**Pendiente**
+- Impresión directa en impresoras de tickets (ESC/POS) sin el diálogo del navegador: depende del modelo de cada cliente.
+- **VERI\*FACTU** (al final; obligación prevista el 01/10/2028): registros de facturación con huella encadenada, QR en el ticket y envío a la AEAT. Validar con la asesoría.
 
 > Las funciones fiscales describen el comportamiento del programa: no certifican el cumplimiento normativo ni sustituyen la revisión de la asesoría.

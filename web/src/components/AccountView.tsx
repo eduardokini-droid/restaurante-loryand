@@ -4,6 +4,8 @@ import { METHOD_LABEL, STATUS_LABEL, money, time, toCents } from '../lib/format'
 import { useLive } from '../lib/realtime';
 import { DocumentPrint } from './DocumentPrint';
 import { CustomerForm } from '../pages/Fidelizacion';
+import { OnlinePaymentModal } from './OnlinePayment';
+import { useSession } from '../lib/session';
 import { ErrorText, Modal, useAction, useToast } from './ui';
 
 interface Item { id: string; orderNumber: number; name: string; option: string | null; unitCents: number; qty: number; destination: string; course: number; status: string; parentItemId: string | null }
@@ -20,6 +22,8 @@ const statusBadge = (s: string) => ({ ready: 'terra', received: 'terra', held: '
 export function AccountView({ accountId, onAddMore, onClosed }: { accountId: string; onAddMore?: () => void; onClosed?: () => void }) {
   const [acc, setAcc] = useState<Account | null>(null);
   const [paying, setPaying] = useState(false);
+  const [online, setOnline] = useState(false);
+  const { me } = useSession();
   const [doc, setDoc] = useState<string | null>(null);
   const { busy, error, run } = useAction();
   const toast = useToast();
@@ -104,6 +108,7 @@ export function AccountView({ accountId, onAddMore, onClosed }: { accountId: str
           {acc.heldCourses.length > 0 && <button className="btn terra" disabled={busy} onClick={fire}>Marchar {acc.heldCourses[0]}.º pase</button>}
           {notDelivered.length > 0 && <button className="btn" disabled={busy} onClick={() => { if (confirm('¿Se han servido realmente todos los productos?')) setStatus(notDelivered.map((i) => i.id), 'delivered'); }}>Todo entregado</button>}
           <button className="btn" disabled={busy || !live.length} onClick={proforma}>Imprimir cuenta</button>
+          {me?.onlinePayment && <button className="btn" disabled={!acc.pendingCents} onClick={() => setOnline(true)}>Cobrar con QR · Tarjeta / Bizum</button>}
           <button className="btn primary" disabled={!acc.pendingCents} onClick={() => setPaying(true)}>Cobrar</button>
         </div>
       )}
@@ -113,6 +118,7 @@ export function AccountView({ accountId, onAddMore, onClosed }: { accountId: str
         setPaying(false); load();
         if (r.documentId) { setDoc(r.documentId); onClosed?.(); }
       }} />}
+      {online && <OnlinePaymentModal accountId={acc.id} onClose={() => { setOnline(false); load(); }} onPaid={() => { load(); onClosed?.(); }} />}
       {doc && <DocumentPrint id={doc} onClose={() => setDoc(null)} />}
     </div>
   );

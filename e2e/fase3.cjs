@@ -38,6 +38,7 @@ const OUT = process.argv[2];
   await pda.goto('http://localhost:3000/personal');
   await pda.fill('input >> nth=0', 'demo'); await pda.fill('input >> nth=1', 'camarero-1'); await pda.fill('input[type=password]', '1111');
   await pda.click('button:has-text("Entrar")');
+  await pda.waitForSelector('button:has-text("Fichar entrada"), h2:has-text("¿Dónde vas a atender?")');
   if (await pda.locator('button:has-text("Fichar entrada")').count()) await pda.click('button:has-text("Fichar entrada")');
   await pda.click('.table-tile:has(.label:text-is("T3"))');
   await pda.waitForTimeout(500);

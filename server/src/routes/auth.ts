@@ -69,6 +69,11 @@ export default async function authRoutes(app: FastifyInstance) {
       const [s] = await sql`select id, started_at from shifts where waiter_id = ${a.id} and ended_at is null`;
       shift = s ?? null;
     }
-    return { actor: a, establishment, shift, modules: MODULES.filter((m) => can(a, m)) };
+    let onlinePayment = false;
+    if (a.establishmentId) {
+      const [pay] = await sql`select 1 from integrations where establishment_id = ${a.establishmentId} and kind = 'redsys' and enabled and secret_enc is not null`;
+      onlinePayment = !!pay;
+    }
+    return { actor: a, establishment, shift, modules: MODULES.filter((m) => can(a, m)), onlinePayment };
   });
 }

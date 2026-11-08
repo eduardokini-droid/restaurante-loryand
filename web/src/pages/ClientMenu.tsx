@@ -8,7 +8,7 @@ import { MenuChooser, type DailyMenu } from '../components/OrderBuilder';
 import { LANGS, allergenName, t as tt, trCategory, trProduct, type Lang } from '../lib/i18n';
 
 interface P { id: string; name: string; description: string; price_cents: number; options: string[]; allergens: string[]; category_id: string | null; subcategory_id: string | null; photo_url: string | null; translations?: Record<string, { name?: string; description?: string }> }
-interface Data { establishment: string; table: { label: string; accessOpen: boolean }; categories: { id: string; parent_id: string | null; name: string; translations?: Record<string, string> }[]; products: P[]; dailyMenu: DailyMenu | null }
+interface Data { establishment: string; table: { label: string; accessOpen: boolean }; categories: { id: string; parent_id: string | null; name: string; translations?: Record<string, string> }[]; products: P[]; dailyMenu: DailyMenu | null; onlinePayment?: boolean }
 interface Line { key: string; p: P; option: string | null; qty: number; menu?: Record<string, string> }
 
 /** Carta digital del cliente: se abre con el QR o NFC de la mesa. */
@@ -146,6 +146,12 @@ export default function ClientMenu() {
             <div key={k} className="ticket-line"><span>{i.qty} × {i.name}{i.option && <span className="muted"> · {i.option}</span>}<div className="small muted">{STATUS_LABEL[i.status]}</div></span><span>{money(i.unitCents * i.qty)}</span></div>
           ))}
           {account && <div className="spread"><strong>Pendiente</strong><strong>{money(account.pendingCents)}</strong></div>}
+          {data.onlinePayment && account?.pendingCents > 0 && (
+            <button className="btn primary block" disabled={busy} onClick={() => withCode(() => run(async () => {
+              const r = await api(`/api/public/table/${token}/pay`, { body: { accessCode: code || sessionStorage.getItem(codeKey) } }).catch(handleCodeError);
+              location.assign(`/pagar/${r.token}`);
+            }))}>Pagar mi cuenta · {money(account.pendingCents)}</button>
+          )}
         </div>
       )}
 

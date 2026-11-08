@@ -3,6 +3,7 @@ import { api } from '../lib/api';
 import { PHYSICAL_LABEL, ZONE_LABEL, minutesSince } from '../lib/format';
 import { useLive } from '../lib/realtime';
 import { ErrorText, Modal, useAction, useToast } from './ui';
+import { WhatsAppPrompt, type MessageResult } from './WhatsAppPrompt';
 
 interface Unit { key: string; tableIds: string[]; labels: string[]; seats: number; zone: string; state: string; blockedReason?: string }
 interface Group {
@@ -17,13 +18,19 @@ export function Waitlist() {
   const [data, setData] = useState<{ groups: Group[]; units: Unit[]; averageStayMin: number; averageFromSamples: number } | null>(null);
   const [adding, setAdding] = useState(false);
   const [choosing, setChoosing] = useState<Group | null>(null);
+  const [wa, setWa] = useState<MessageResult | null>(null);
   const { busy, error, run } = useAction();
   const toast = useToast();
   const load = useCallback(() => { api('/api/waitlist').then(setData).catch(() => {}); }, []);
   useEffect(load, [load]);
   useLive(load, ['tables', 'payments', 'orders'], { intervalMs: 30000 });
 
-  const act = (g: Group, path: string, body: object = {}, msg?: string) => run(async () => { await api(`/api/waitlist/${g.id}/${path}`, { body }); if (msg) toast(msg); load(); });
+  const act = (g: Group, path: string, body: object = {}, msg?: string) => run(async () => {
+    const r = await api(`/api/waitlist/${g.id}/${path}`, { body });
+    if (r?.message?.status === 'sent') toast(`Mesa asignada y aviso enviado a ${g.name} por WhatsApp.`);
+    else if (msg) toast(msg);
+    setWa(r?.message ?? null); load();
+  });
   if (!data) return <p className="muted">Cargando lista de espera…</p>;
   const waiting = data.groups.filter((g) => g.status === 'waiting');
   const notified = data.groups.filter((g) => g.status === 'notified');
@@ -73,7 +80,7 @@ export function Waitlist() {
               </div>
             </div>
             <span className="row" style={{ gap: '.3rem' }}>
-              {g.proposal && <button className="btn small primary" disabled={busy} onClick={() => act(g, 'assign', { tableIds: g.proposal!.tableIds }, `Mesa asignada. Avisa a ${g.name}: el programa no envía mensajes.`)}>Confirmar {unitName(g.proposal.labels)} y marcar avisado</button>}
+              {g.proposal && <button className="btn small primary" disabled={busy} onClick={() => act(g, 'assign', { tableIds: g.proposal!.tableIds }, `Mesa asignada. Avisa a ${g.name} personalmente o por WhatsApp.`)}>Confirmar {unitName(g.proposal.labels)} y marcar avisado</button>}
               <button className="btn small" onClick={() => setChoosing(g)}>Otra mesa…</button>
               <button className="btn small ghost" disabled={busy} onClick={() => confirm(`¿Cancelar la espera de ${g.name}?`) && act(g, 'close', { reason: 'cancelled' })}>Cancelar</button>
             </span>
@@ -82,6 +89,7 @@ export function Waitlist() {
       </div>
       <p className="small muted">La espera estimada se calcula con la duración media real de las mesas del local y su estado actual (pagada, pendiente de limpiar…). Es orientativa: la disponibilidad la confirma el personal.</p>
 
+      <WhatsAppPrompt result={wa} onClose={() => setWa(null)} />
       {adding && <AddGroup onClose={() => setAdding(false)} onDone={() => { setAdding(false); load(); }} />}
       {choosing && (
         <Modal title={`Mesa para ${choosing.name} (${choosing.party_size})`} onClose={() => setChoosing(null)}>

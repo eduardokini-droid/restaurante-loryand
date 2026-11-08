@@ -58,3 +58,29 @@ Las traducciones se pueden escribir a mano en la ficha de cada producto. Para el
 hay plan gratuito):
 1. En Render: servicio **restaurante-loryand** → **Environment** → **Add Environment Variable**.
 2. Nombre `DEEPL_API_KEY`, valor tu clave. Guarda: el servicio se reinicia solo.
+
+## 7. Pagos online con Redsys (tarjeta y Bizum)
+Se configura en **Gestión → Pagos y WhatsApp** (solo el administrador).
+
+**Probar primero en el entorno de pruebas (gratis, no cobra):**
+1. Pulsa «Rellenar con los datos públicos de pruebas de Redsys», marca Tarjeta (y Bizum si quieres),
+   marca «Habilitar cobro online» y guarda.
+2. Haz una comanda en una mesa, pulsa **Cobrar con QR · Tarjeta / Bizum** y escanea el QR con el móvil.
+3. En la pasarela de pruebas de Redsys usa la tarjeta de pruebas que indica su documentación
+   (habitualmente 4548 8100 0000 0003, caducidad futura, CVV 123). Si no funciona, el banco te facilita las suyas.
+4. A los pocos segundos la PDA debe mostrar **Pagado** y la cuenta queda cobrada con su ticket.
+
+**Pasar a real:** pide al banco el TPV virtual (y Bizum si lo quieres). Introduce tu código de comercio,
+terminal y clave de firma SHA-256 (están en el panel de Redsys), elige «Real» y guarda.
+La «URL de notificación» que aparece en esa pantalla es la que usa Redsys para confirmar cada pago;
+normalmente no hay que configurarla en Redsys porque el programa la envía en cada operación.
+Las devoluciones se hacen desde el panel de Redsys.
+
+## 8. Avisos por WhatsApp
+En **Gestión → Pagos y WhatsApp**:
+- **Modo enlace** (gratis, sin alta): activa los avisos y guarda. Al confirmar una reserva o avisar a un
+  grupo de la lista de espera, aparece «Abrir WhatsApp» con el mensaje escrito; solo hay que pulsar enviar.
+- **Envío automático**: necesitas WhatsApp Business Platform (Meta Business, número verificado y
+  plantillas aprobadas). Copia el identificador del número y un token de acceso permanente, crea las tres
+  plantillas con las variables indicadas en la pantalla y prueba con «Enviar prueba» a tu móvil.
+  En este modo también se envían recordatorios automáticos antes de cada reserva confirmada.

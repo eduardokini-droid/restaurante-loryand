@@ -6,6 +6,7 @@ export interface Me {
   establishment: { id: string; slug: string; name: string; features: string[]; settings: Record<string, boolean> } | null;
   shift: { id: string; started_at: string } | null;
   modules: string[];
+  onlinePayment?: boolean;
 }
 interface Ctx { me: Me | null; loading: boolean; refresh: () => Promise<void>; logout: () => Promise<void> }
 const SessionCtx = createContext<Ctx>(null as never);

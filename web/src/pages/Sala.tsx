@@ -4,6 +4,7 @@ import { money, minutesSince } from '../lib/format';
 import { useFloor, FloorGrid, TableControls, type FloorTable } from '../components/Floor';
 import { AccountView } from '../components/AccountView';
 import { Modal } from '../components/ui';
+import { OnlineConflicts } from '../components/OnlinePayment';
 
 /** Panel de control: lo que requiere atención ahora mismo. */
 export default function Sala() {
@@ -18,6 +19,7 @@ export default function Sala() {
   return (
     <div className="stack">
       <div className="spread"><h1>Sala</h1>{!connected && <span className="badge danger">Sin conexión en tiempo real</span>}</div>
+      <OnlineConflicts />
       <div className="grid cols-2">
         <div className="card"><div className="muted small">Mesas con cuenta abierta</div><h2>{busy.length} / {floor.tables.length}</h2></div>
         <div className="card"><div className="muted small">Pendiente de cobro</div><h2>{money(pending)}</h2></div>

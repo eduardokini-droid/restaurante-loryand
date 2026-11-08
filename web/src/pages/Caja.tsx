@@ -3,6 +3,7 @@ import { api } from '../lib/api';
 import { DOC_LABEL, METHOD_LABEL, dateTime, money, today } from '../lib/format';
 import { DocumentPrint } from '../components/DocumentPrint';
 import { ErrorText, useAction } from '../components/ui';
+import { OnlineConflicts } from '../components/OnlinePayment';
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 
@@ -42,6 +43,7 @@ export default function Caja() {
         <button className="btn small" onClick={() => preset(45)}>45 días</button>
       </div>
       <ErrorText error={error} />
+      <OnlineConflicts />
       {rep && (
         <div className="printable stack">
           <div className="grid cols-2">
