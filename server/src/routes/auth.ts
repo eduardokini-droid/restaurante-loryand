@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { sql } from '../db.js';
 import { COOKIE, checkPassword, createSession, destroySession, pinLookup, requireActor, setSessionCookie, can, MODULES } from '../auth.js';
@@ -27,27 +28,64 @@ export default async function authRoutes(app: FastifyInstance) {
   /** Acceso de camarero: establecimiento + usuario "camarero-ID" + PIN, o su QR personal. */
   app.post('/api/auth/waiter', async (req, reply) => {
     checkLimit(req, 'waiter');
+    const pin = z.string().regex(/^\d{4,6}$/, 'el PIN tiene de 4 a 6 cifras');
     const body = parse(z.union([
-      z.object({ establishment: z.string().min(1), username: z.string().regex(/^camarero-\d+$/i), pin: z.string().regex(/^\d{4,6}$/) }),
-      z.object({ qrToken: z.string().min(10) }),
+      z.object({ establishment: z.string().min(1), username: z.string().regex(/^camarero-\d+$/i), pin, clockIn: z.boolean().optional() }),
+      // QR de acceso del TPV (un solo uso, 2 minutos) o QR personal: SIEMPRE con el PIN del camarero.
+      z.object({ accessToken: z.string().min(20).max(100), pin, clockIn: z.boolean().optional() }),
+      z.object({ qrToken: z.string().min(10), pin, clockIn: z.boolean().optional() }),
     ]), req.body);
     let waiterId: string | undefined;
-    if ('qrToken' in body) {
-      const [w] = await sql`select w.id from waiters w join establishments e on e.id = w.establishment_id
+    let accessHash: string | undefined;
+    const pinOk = (w: Record<string, any>) => w.pin_lookup === pinLookup(w.establishment_id, body.pin);
+    if ('accessToken' in body) {
+      accessHash = createHash('sha256').update(body.accessToken).digest('hex');
+      const [w] = await sql`select w.id, w.establishment_id, w.pin_lookup, t.used_at, t.expires_at > now() as valid
+                            from waiter_access_tokens t join waiters w on w.id = t.waiter_id join establishments e on e.id = w.establishment_id
+                            where t.token_hash = ${accessHash} and w.active and e.active`;
+      if (!w || w.used_at || !w.valid) throw new AppError(410, 'access_expired', 'Este código ya se ha usado o ha caducado. Pide uno nuevo en el TPV.');
+      if (pinOk(w)) waiterId = w.id;
+    } else if ('qrToken' in body) {
+      const [w] = await sql`select w.id, w.establishment_id, w.pin_lookup from waiters w join establishments e on e.id = w.establishment_id
                             where w.qr_token = ${body.qrToken} and w.active and e.active`;
-      waiterId = w?.id;
+      if (w && pinOk(w)) waiterId = w.id;
     } else {
       const code = Number(body.username.split('-')[1]);
       const [w] = await sql`select w.id, w.establishment_id, w.pin_lookup from waiters w join establishments e on e.id = w.establishment_id
                             where e.slug = ${body.establishment} and e.active and w.code = ${code} and w.active`;
-      if (w && w.pin_lookup === pinLookup(w.establishment_id, body.pin)) waiterId = w.id;
+      if (w && pinOk(w)) waiterId = w.id;
     }
     if (!waiterId) {
       recordFailure(req, 'waiter');
       throw new AppError(401, 'bad_credentials', 'Usuario o PIN incorrectos');
     }
+    if (accessHash) {
+      // Un solo uso: si dos teléfonos lo intentan a la vez, solo entra el primero.
+      const [used] = await sql`update waiter_access_tokens set used_at = now() where token_hash = ${accessHash} and used_at is null returning waiter_id`;
+      if (!used) throw new AppError(410, 'access_expired', 'Este código ya se ha usado. Pide uno nuevo en el TPV.');
+    }
+    if (body.clockIn) await sql`insert into shifts (waiter_id) values (${waiterId}) on conflict do nothing`;
     setSessionCookie(reply, await createSession('waiter', waiterId));
     return { ok: true };
+  });
+
+  /** Datos visibles del QR de acceso (sin secretos): para saludar al camarero por su nombre antes del PIN. */
+  app.get('/api/auth/waiter-access/:token', async (req) => {
+    const { token } = parse(z.object({ token: z.string().min(20).max(100) }), req.params);
+    const [t] = await sql`select w.name, e.name as establishment, (t.used_at is null and t.expires_at > now()) as valid, t.expires_at
+                          from waiter_access_tokens t join waiters w on w.id = t.waiter_id join establishments e on e.id = w.establishment_id
+                          where t.token_hash = ${createHash('sha256').update(token).digest('hex')}`;
+    if (!t) throw new AppError(404, 'not_found', 'Código no válido');
+    return { waiter: t.name, establishment: t.establishment, valid: t.valid, expiresAt: t.expires_at };
+  });
+
+  /** QR personal impreso: identifica al camarero (el PIN sigue siendo obligatorio). */
+  app.get('/api/auth/waiter-qr/:token', async (req) => {
+    const { token } = parse(z.object({ token: z.string().min(10).max(100) }), req.params);
+    const [w] = await sql`select w.name, e.name as establishment from waiters w join establishments e on e.id = w.establishment_id
+                          where w.qr_token = ${token} and w.active and e.active`;
+    if (!w) throw new AppError(404, 'not_found', 'Código no válido');
+    return { waiter: w.name, establishment: w.establishment, valid: true };
   });
 
   app.post('/api/auth/logout', async (req, reply) => {

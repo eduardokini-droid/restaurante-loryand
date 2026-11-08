@@ -19,33 +19,65 @@ export default function Personal() {
 }
 
 function WaiterLogin({ onDone }: { onDone: () => Promise<void> }) {
-  const qr = new URLSearchParams(location.search).get('qr');
+  const params = new URLSearchParams(location.search);
+  const accessToken = params.get('acceso');
+  const qrToken = params.get('qr');
+  const [who, setWho] = useState<{ waiter: string; establishment: string; valid: boolean } | null>(null);
+  const [badCode, setBadCode] = useState(false);
   const [slug, setSlug] = useState(() => { try { return localStorage.getItem(LAST_SLUG) ?? ''; } catch { return ''; } });
   const [username, setUsername] = useState('camarero-');
   const [pin, setPin] = useState('');
+  const [clockIn, setClockIn] = useState(true);
   const { busy, error, run } = useAction();
   useEffect(() => {
-    if (qr) run(async () => { await api('/api/auth/waiter', { body: { qrToken: qr } }); history.replaceState(null, '', '/personal'); await onDone(); });
-  }, [qr]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (accessToken) api(`/api/auth/waiter-access/${accessToken}`).then(setWho).catch(() => setBadCode(true));
+    else if (qrToken) api(`/api/auth/waiter-qr/${qrToken}`).then(setWho).catch(() => setBadCode(true));
+  }, [accessToken, qrToken]);
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     run(async () => {
-      await api('/api/auth/waiter', { body: { establishment: slug.trim(), username: username.trim().toLowerCase(), pin } });
-      try { localStorage.setItem(LAST_SLUG, slug.trim()); } catch { /* */ }
+      if (accessToken) await api('/api/auth/waiter', { body: { accessToken, pin, clockIn } });
+      else if (qrToken) await api('/api/auth/waiter', { body: { qrToken, pin, clockIn } });
+      else {
+        await api('/api/auth/waiter', { body: { establishment: slug.trim(), username: username.trim().toLowerCase(), pin, clockIn } });
+        try { localStorage.setItem(LAST_SLUG, slug.trim()); } catch { /* */ }
+      }
+      history.replaceState(null, '', '/personal');
       await onDone();
     });
   };
+  const viaCode = !!(accessToken || qrToken);
   return (
     <div className="center-page">
       <form className="card login" onSubmit={submit}>
         <div style={{ fontWeight: 800, letterSpacing: '.12em', color: 'var(--green)' }}>LORYAND</div>
-        <h1>Acceso de personal</h1>
-        <label>Establecimiento<input value={slug} onChange={(e) => setSlug(e.target.value)} autoCapitalize="none" required /></label>
-        <label>Usuario<input value={username} onChange={(e) => setUsername(e.target.value)} autoCapitalize="none" required /></label>
-        <label>PIN<input type="password" inputMode="numeric" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))} required /></label>
-        <ErrorText error={error} />
-        <button className="btn primary block" disabled={busy}>{busy ? 'Entrando…' : 'Entrar'}</button>
-        <p className="small muted mt">También puedes entrar escaneando tu QR personal.</p>
+        {viaCode ? (
+          badCode || (who && !who.valid) ? (
+            <><h1>Código no válido</h1><p>Este código ya se ha usado o ha caducado. Pide uno nuevo en el TPV («Acceso camareros»).</p>
+              <a className="btn block" href="/personal">Entrar con usuario y PIN</a></>
+          ) : (
+            <>
+              <h1>Hola, {who?.waiter ?? '…'}</h1>
+              <p className="muted">{who?.establishment}. Escribe tu PIN para entrar. Si este no es tu nombre, no continúes.</p>
+              <label>Tu PIN<input autoFocus type="password" inputMode="numeric" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))} required /></label>
+            </>
+          )
+        ) : (
+          <>
+            <h1>Acceso de personal</h1>
+            <label>Establecimiento<input value={slug} onChange={(e) => setSlug(e.target.value)} autoCapitalize="none" required /></label>
+            <label>Usuario<input value={username} onChange={(e) => setUsername(e.target.value)} autoCapitalize="none" required /></label>
+            <label>PIN<input type="password" inputMode="numeric" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))} required /></label>
+          </>
+        )}
+        {!(viaCode && (badCode || (who && !who.valid))) && (
+          <>
+            <label className="check"><input type="checkbox" checked={clockIn} onChange={(e) => setClockIn(e.target.checked)} /> Fichar la entrada ahora</label>
+            <ErrorText error={error} />
+            <button className="btn primary block" disabled={busy || pin.length < 4}>{busy ? 'Entrando…' : 'Entrar'}</button>
+            {!viaCode && <p className="small muted mt">También puedes entrar desde el TPV: «Acceso camareros» → tu nombre → escanea el código.</p>}
+          </>
+        )}
       </form>
     </div>
   );

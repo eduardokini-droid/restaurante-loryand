@@ -24,7 +24,8 @@ const OUT = process.argv[2];
   await pda.fill('input >> nth=1', 'camarero-1');
   await pda.fill('input[type=password]', '1111');
   await pda.click('button:has-text("Entrar")');
-  await pda.click('button:has-text("Fichar entrada")');
+  await pda.waitForSelector('button:has-text("Fichar entrada"), h2:has-text("¿Dónde vas a atender?")');
+  if (await pda.locator('button:has-text("Fichar entrada")').count()) await pda.click('button:has-text("Fichar entrada")');
   await pda.waitForSelector('text=¿Dónde vas a atender?');
   // Clave de la mesa 2 desde la PDA
   await pda.click('.table-tile:has(.label:text-is("2"))');

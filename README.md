@@ -14,6 +14,7 @@ El manual pedía al personal que vigilara a mano varias cosas. Ahora las garanti
 | «Pendiente de sincronizar no significa recibido por cocina» | Si se va la conexión, la PDA guarda la comanda con su identificador y avisa claramente de que **aún no ha llegado**. Al volver internet se reenvía sola, sin duplicar. |
 | Precios que podían alterarse desde el dispositivo | El precio sale siempre de la base de datos, nunca del teléfono. |
 | PIN de 4 cifras adivinable | Acceso con límite de intentos fallidos (camareros, panel y clave de mesa). |
+| QR personal del camarero que entraba sin PIN (quien lo leyera trabajaba con su identidad) | «Acceso camareros» en el TPV: el camarero pulsa su nombre, escanea un QR de un solo uso que caduca en 2 minutos y entra con **su PIN** (y ficha a la vez). El QR personal impreso también exige el PIN. |
 | Mesa pagada confundida con mesa libre | Estado físico separado: Ocupada → Pagada · aún ocupada → Pendiente de limpiar → Libre. No se puede liberar una mesa con cuenta pendiente, y al liberarla se renueva la clave de la carta. |
 | Una sola cuenta por mesa «según el uso» | La base de datos impide dos cuentas abiertas en la misma mesa o con el mismo nombre de barra. |
 | Borrar un producto cambiaba el historial | Los pedidos guardan nombre y precio del momento de la venta. «Eliminar» archiva el producto. |
@@ -94,12 +95,13 @@ Direcciones: `/gestion` (panel), `/personal` (PDA), `/carta/<código-de-mesa>` (
 ## Pruebas
 
 ```bash
-npm test                    # 70 pruebas de integración contra PostgreSQL (base loryand_test)
+npm test                    # 74 pruebas de integración contra PostgreSQL (base loryand_test)
 node e2e/servicio-completo.cjs /tmp/capturas   # servicio completo en navegador real
 node e2e/fase2.cjs /tmp/capturas               # lista de espera, reservas, menú y factura completa
 node e2e/fase3.cjs /tmp/capturas               # plano, almacén, cupones, idiomas, copias y tarjeta
 node e2e/fase4.cjs /tmp/capturas               # cobro con QR (Redsys simulado) y aviso por WhatsApp
 node e2e/impresion.cjs /tmp/capturas           # agente real con impresora de red simulada
+node e2e/acceso.cjs /tmp/capturas              # acceso de camareros desde el TPV con QR de un solo uso + PIN
 ```
 
 Las pruebas cubren: comandas duplicadas, opciones obligatorias, pases retenidos, fichaje, modo exclusivo, cuentas de barra,

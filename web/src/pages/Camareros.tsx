@@ -81,7 +81,7 @@ function WaiterQr({ w, slug, onClose, onRegenerate }: { w: Waiter; slug: string;
     <Modal title={`Acceso de ${w.name}`} onClose={onClose}>
       <p className="small">Local: <code>{slug}</code> · Usuario: <code>{w.username}</code></p>
       {img && <img src={img} alt="QR personal" style={{ width: 240, display: 'block', margin: '0 auto' }} />}
-      <p className="notice small">Este QR da acceso personal a la PDA. No lo compartas entre empleados.</p>
+      <p className="notice small">Este QR identifica al camarero, pero para entrar siempre pide su PIN. Para el día a día es más cómodo «Acceso camareros» en el TPV: un código de un solo uso que caduca en 2 minutos.</p>
       <div className="row mt">
         <button className="btn" onClick={() => navigator.clipboard?.writeText(url)}>Copiar enlace</button>
         {img && <a className="btn" href={img} download={`acceso-${w.username}.png`}>Descargar QR</a>}

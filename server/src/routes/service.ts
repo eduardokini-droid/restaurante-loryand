@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { createHash, randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import { sql } from '../db.js';
 import { type Actor, actorLabel, can, establishmentOf, requireActor, requireService } from '../auth.js';
@@ -102,6 +103,23 @@ export default async function serviceRoutes(app: FastifyInstance) {
   app.get('/api/service/waiters', async (req) => {
     requireService(req);
     return sql`select id, code, name from waiters where establishment_id = ${establishmentOf(req)} and active order by name`;
+  });
+
+  /** "Acceso camareros" en el TPV: QR de un solo uso (2 minutos) para que el camarero entre en su teléfono con su PIN. */
+  app.post('/api/service/waiter-access', async (req) => {
+    const a = requireService(req);
+    if (a.kind === 'waiter') throw forbidden('El acceso de camareros se genera desde el TPV');
+    const est = establishmentOf(req);
+    const { waiterId } = parse(z.object({ waiterId: z.string().uuid() }), req.body);
+    const [w] = await sql`select id, name from waiters where id = ${waiterId} and establishment_id = ${est} and active`;
+    if (!w) throw notFound('Camarero');
+    const token = randomBytes(24).toString('base64url');
+    const [t] = await sql`insert into waiter_access_tokens (token_hash, waiter_id, created_by, expires_at)
+                          values (${createHash('sha256').update(token).digest('hex')}, ${w.id}, ${actorLabel(a)}, now() + interval '2 minutes')
+                          returning expires_at`;
+    // Limpieza de códigos antiguos.
+    await sql`delete from waiter_access_tokens where created_at < now() - interval '1 day'`;
+    return { token, path: `/personal?acceso=${token}`, waiter: w.name, expiresAt: t.expires_at };
   });
 
   // ---------- Fichaje ----------

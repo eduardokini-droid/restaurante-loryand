@@ -5,6 +5,7 @@ import { AccountView } from './AccountView';
 import { FloorGrid, TableControls, useFloor, type FloorTable } from './Floor';
 import { OrderBuilder, type OrderTarget } from './OrderBuilder';
 import { Empty } from './ui';
+import { WaiterAccess } from './WaiterAccess';
 
 type View =
   | { kind: 'floor' }
@@ -16,6 +17,7 @@ export function ServiceScreen({ mode }: { mode: 'tpv' | 'pda' }) {
   const { floor, reload } = useFloor();
   const [view, setView] = useState<View>({ kind: 'floor' });
   const [newBar, setNewBar] = useState(false);
+  const [access, setAccess] = useState(false);
 
   if (!floor) return <p className="muted">Cargando sala…</p>;
 
@@ -70,7 +72,10 @@ export function ServiceScreen({ mode }: { mode: 'tpv' | 'pda' }) {
     <div className="stack">
       <div className="spread">
         <h2 style={{ margin: 0 }}>¿Dónde vas a atender?</h2>
-        <button className="btn terra" onClick={() => setNewBar(true)}>+ Cliente de barra</button>
+        <span className="row">
+          {mode === 'tpv' && <button className="btn" onClick={() => setAccess(true)}>Acceso camareros</button>}
+          <button className="btn terra" onClick={() => setNewBar(true)}>+ Cliente de barra</button>
+        </span>
       </div>
       {mode === 'pda' && !floor.sharedTables && <p className="small muted">Modo exclusivo: solo ves las mesas asignadas a ti.</p>}
       {floor.bar.length > 0 && (
@@ -88,6 +93,7 @@ export function ServiceScreen({ mode }: { mode: 'tpv' | 'pda' }) {
         </div>
       )}
       <FloorGrid tables={floor.tables} onPick={openTable} />
+      {access && <WaiterAccess onClose={() => setAccess(false)} />}
       {newBar && <NewBarDialog mode={mode} existing={floor.bar.map((b) => b.bar_name.toLowerCase())} onClose={() => setNewBar(false)}
         onStart={(barName, waiterId) => {
           setNewBar(false);
