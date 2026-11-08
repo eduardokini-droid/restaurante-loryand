@@ -2,11 +2,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { ALLERGENS, money, toCents } from '../lib/format';
 import { ErrorText, Modal, useAction, useToast } from '../components/ui';
+import { LANGS } from '../lib/i18n';
 
 interface Category { id: string; parent_id: string | null; name: string; sort: number }
 interface Product {
   id: string; name: string; description: string; price_cents: number; vat_rate: string; destination: string; course: number;
   visible: boolean; options: string[]; allergens: string[]; category_id: string | null; subcategory_id: string | null; photo_url: string | null;
+  translations: Record<string, { name: string; description: string }>;
 }
 
 export default function Carta() {
@@ -102,6 +104,10 @@ function ProductForm({ product, cats, onClose, onSaved }: { product: Product | n
   const { busy, error, run } = useAction();
   const toast = useToast();
   const set = (k: string, v: unknown) => setF((x) => ({ ...x, [k]: v }));
+  const [tr, setTr] = useState<Record<string, { name: string; description: string }>>(product?.translations ?? {});
+  const [lang, setLang] = useState('en');
+  const doneLangs = LANGS.filter(([k]) => k !== 'es' && tr[k]?.name).length;
+  const autoTranslate = () => run(async () => { const p = await api(`/api/admin/products/${product!.id}/translate`, { body: {} }); setTr(p.translations); toast('Traducido a 6 idiomas. Revisa ingredientes y nombres comerciales.'); });
   const subs = cats.filter((c) => c.parent_id === f.categoryId && f.categoryId);
 
   const save = () => run(async () => {
@@ -111,6 +117,7 @@ function ProductForm({ product, cats, onClose, onSaved }: { product: Product | n
       name: f.name, description: f.description, priceCents, vatRate: f.vatRate, destination: f.destination, course: f.course,
       visible: f.visible, options: f.options, allergens: f.allergens, categoryId: f.categoryId || null,
       subcategoryId: f.subcategoryId || null, photoUrl: f.photoUrl || null,
+      translations: Object.fromEntries(Object.entries(tr).filter(([, v]) => v.name || v.description)),
     };
     if (product) await api(`/api/admin/products/${product.id}`, { method: 'PATCH', body });
     else await api('/api/admin/products', { body });
@@ -149,6 +156,14 @@ function ProductForm({ product, cats, onClose, onSaved }: { product: Product | n
         </div>
       </fieldset>
       <label>URL de la foto (opcional)<input value={f.photoUrl} onChange={(e) => set('photoUrl', e.target.value)} placeholder="https://…" /></label>
+      <details className="card" style={{ marginBottom: '.75rem' }}>
+        <summary><strong>Traducciones del producto</strong> <span className="small muted">({doneLangs} de 6 idiomas)</span></summary>
+        <div className="chips mt">{LANGS.filter(([k]) => k !== 'es').map(([k, l]) => <button key={k} className={`chip ${lang === k ? 'on' : ''}`} onClick={() => setLang(k)}>{l}{tr[k]?.name ? ' ✓' : ''}</button>)}</div>
+        <label className="mt">Nombre<input value={tr[lang]?.name ?? ''} onChange={(e) => setTr({ ...tr, [lang]: { name: e.target.value, description: tr[lang]?.description ?? '' } })} placeholder={f.name} /></label>
+        <label>Descripción<textarea rows={2} value={tr[lang]?.description ?? ''} onChange={(e) => setTr({ ...tr, [lang]: { name: tr[lang]?.name ?? '', description: e.target.value } })} placeholder={f.description} /></label>
+        {product && <button className="btn small" disabled={busy} onClick={autoTranslate}>Traducir automáticamente desde el español</button>}
+        <p className="small muted">Si cambias el nombre o la descripción en español, revisa también las traducciones. No traduzcas marcas comerciales.</p>
+      </details>
       <label className="check"><input type="checkbox" checked={f.visible} onChange={(e) => set('visible', e.target.checked)} /> Visible en la carta del cliente</label>
       <ErrorText error={error} />
       <div className="spread mt">

@@ -41,6 +41,15 @@ El manual pedía al personal que vigilara a mano varias cosas. Ahora las garanti
 - **Factura completa** a partir del ticket con datos fiscales del cliente, dentro del mismo trimestre; el ticket queda sustituido y no duplica importes.
 - **Control de camareros**: fichajes, horas, comandas tomadas y cobros realizados por periodo.
 
+### Fase 3
+- **Plano del local**: mesas colocadas arrastrándolas (cuadradas, redondas o alargadas) y estado en tiempo real.
+- **Almacén**: materias primas y bebidas con stock, mínimo de aviso y coste por unidad; compras (coste medio ponderado), mermas y correcciones de recuento.
+- **Escandallos con control de unidades**: conversión automática (ml↔l, g↔kg, envases como «1 botella = 0,75 l») y aviso cuando una cantidad parece un error de unidad (30 l en vez de 30 ml). La venta descuenta del almacén y la anulación lo devuelve.
+- **Rentabilidad** por producto: venta sin IVA, coste según escandallo y margen.
+- **Fidelización**: fichas de cliente, visitas, gasto, puntos por euro, clientes con más de 45 días sin venir, cupones generales o personales con QR, caducidad, mínimo y número de usos, y **tarjeta digital** del cliente en `/tarjeta/<código>`. El cupón descuenta del total (con el IVA repartido proporcionalmente); no es un cobro.
+- **Copias de seguridad**: diaria automática (se guardan 14), manual y preventiva antes de restaurar; descarga en JSON. **Incluyen la lista de espera y los estados de mesa.** La restauración se verifica antes y se bloquea si hay cuentas abiertas o si se perderían facturas emitidas.
+- **Idiomas de la carta**: inglés, francés, alemán, italiano, portugués y ruso, con selector en la carta del cliente (detecta el idioma del teléfono). Traducción manual en la ficha del producto o automática con DeepL si se configura `DEEPL_API_KEY`.
+
 ## Puesta en marcha
 
 Requisitos: Node.js 22 y PostgreSQL 14 o superior.
@@ -69,9 +78,10 @@ Direcciones: `/gestion` (panel), `/personal` (PDA), `/carta/<código-de-mesa>` (
 ## Pruebas
 
 ```bash
-npm test                    # 35 pruebas de integración contra PostgreSQL (base loryand_test)
+npm test                    # 53 pruebas de integración contra PostgreSQL (base loryand_test)
 node e2e/servicio-completo.cjs /tmp/capturas   # servicio completo en navegador real
 node e2e/fase2.cjs /tmp/capturas               # lista de espera, reservas, menú y factura completa
+node e2e/fase3.cjs /tmp/capturas               # plano, almacén, cupones, idiomas, copias y tarjeta
 ```
 
 Las pruebas cubren: comandas duplicadas, opciones obligatorias, pases retenidos, fichaje, modo exclusivo, cuentas de barra,
@@ -79,13 +89,6 @@ bloqueo de cobro con platos sin servir, doble cobro, cobros simultáneos, pagos 
 estados físicos de la mesa, clave de la carta, límite de intentos, avisos sin duplicar, PIN únicos, unión de cuentas y cierre de caja.
 
 ## Hoja de ruta
-
-**Fase 3 · Gestión**
-- Plano visual del local con posiciones arrastrables (cap. 10).
-- Almacén, compras y mermas; escandallos con **control de unidades** (ml/l, g/kg) para evitar el error de «30 litros» (cap. 21-22).
-- Fidelización y cupones (cap. 23).
-- Copias de seguridad automáticas que **sí incluyen** lista de espera y estados de mesa, con verificación previa a restaurar (cap. 25).
-- Traducción de la carta a 6 idiomas (cap. 7).
 
 **Fase 4 · Integraciones (requieren contratos y pruebas reales)**
 - Pagos online con Redsys (tarjeta y Bizum) desde el QR de la mesa (cap. 17).

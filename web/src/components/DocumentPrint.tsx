@@ -29,6 +29,8 @@ export function DocumentPrint({ id, onClose }: { id: string; onClose: () => void
           {p.lines.filter((l: any) => l.unitCents > 0 || !l.name.includes('·')).map((l: any, i: number) => (
             <div key={i} className="l"><span>{l.qty} {l.name}</span><span>{money(l.unitCents * l.qty)}</span></div>
           ))}
+          {p.discounts?.map((x: any, i: number) => <div key={`d${i}`} className="l"><span>{x.label}</span><span>-{money(x.amountCents)}</span></div>)}
+          {p.loyaltyCustomer && <div>Cliente: {p.loyaltyCustomer}</div>}
           <hr />
           <div className="l"><strong>TOTAL</strong><strong>{money(d.total_cents)}</strong></div>
           {p.vat.map((v: any) => (

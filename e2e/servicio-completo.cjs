@@ -7,7 +7,7 @@ const OUT = process.argv[2];
   const errors = [];
   const watch = (p, n) => { p.on('pageerror', e => errors.push(`${n}: ${e.message}`)); p.on('console', m => m.type() === 'error' && errors.push(`${n} console: ${m.text()}`)); };
   // 1. Administrador
-  const admin = await (await browser.newContext({ viewport: { width: 1280, height: 850 } })).newPage(); watch(admin, 'admin');
+  const admin = await (await browser.newContext({ locale: 'es-ES', viewport: { width: 1280, height: 850 } })).newPage(); watch(admin, 'admin');
   await admin.goto('http://localhost:3000/gestion');
   await admin.fill('input[autocomplete=username]', 'admin');
   await admin.fill('input[type=password]', 'admin1234');
@@ -17,7 +17,7 @@ const OUT = process.argv[2];
   const tables = await admin.evaluate(() => fetch('/api/admin/tables').then(r => r.json()));
   const t2 = tables.find(t => t.label === '2');
   // 2. Camarero en PDA (móvil)
-  const pdaCtx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
+  const pdaCtx = await browser.newContext({ locale: 'es-ES', viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
   const pda = await pdaCtx.newPage(); watch(pda, 'pda');
   await pda.goto('http://localhost:3000/personal');
   await pda.fill('input >> nth=0', 'demo');
@@ -41,7 +41,7 @@ const OUT = process.argv[2];
   await pda.click('button:has-text("Enviar comanda")');
   await pda.waitForSelector('text=Pedido n.º 1 enviado');
   // 3. Cliente desde la carta (móvil) en la misma mesa
-  const cli = await (await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 })).newPage(); watch(cli, 'cliente');
+  const cli = await (await browser.newContext({ locale: 'es-ES', viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 })).newPage(); watch(cli, 'cliente');
   await cli.goto(`http://localhost:3000/carta/${t2.qr_token}`);
   await cli.click('.chip:has-text("Bebidas")');
   await cli.click('section .card:has-text("Refresco")');
@@ -54,7 +54,7 @@ const OUT = process.argv[2];
   await cli.waitForSelector('text=Pedido n.º 2 recibido');
   await cli.click('.chip:has-text("Quiero pagar")');
   // 4. Cocina
-  const kit = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage(); watch(kit, 'cocina');
+  const kit = await (await browser.newContext({ locale: 'es-ES', viewport: { width: 1280, height: 800 } })).newPage(); watch(kit, 'cocina');
   await kit.goto('http://localhost:3000/gestion');
   await kit.fill('input[autocomplete=username]', 'cocina');
   await kit.fill('input[type=password]', 'cocina1234');
@@ -65,7 +65,7 @@ const OUT = process.argv[2];
   if (kitchenText.includes('Entrecot')) errors.push('El 2.º pase no debería estar en cocina aún');
   await kit.click('button:has-text("Todo listo")');
   // Barra
-  const bar = await (await browser.newContext()).newPage(); watch(bar, 'barra');
+  const bar = await (await browser.newContext({ locale: 'es-ES' })).newPage(); watch(bar, 'barra');
   await bar.goto('http://localhost:3000/gestion');
   await bar.fill('input[autocomplete=username]', 'barra'); await bar.fill('input[type=password]', 'barra1234');
   await bar.click('button:has-text("Entrar")');

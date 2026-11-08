@@ -5,9 +5,10 @@ import { ALLERGENS, STATUS_LABEL, money } from '../lib/format';
 import { useLive } from '../lib/realtime';
 import { ErrorText, Modal, useAction } from '../components/ui';
 import { MenuChooser, type DailyMenu } from '../components/OrderBuilder';
+import { LANGS, allergenName, t as tt, trCategory, trProduct, type Lang } from '../lib/i18n';
 
-interface P { id: string; name: string; description: string; price_cents: number; options: string[]; allergens: string[]; category_id: string | null; subcategory_id: string | null; photo_url: string | null }
-interface Data { establishment: string; table: { label: string; accessOpen: boolean }; categories: { id: string; parent_id: string | null; name: string }[]; products: P[]; dailyMenu: DailyMenu | null }
+interface P { id: string; name: string; description: string; price_cents: number; options: string[]; allergens: string[]; category_id: string | null; subcategory_id: string | null; photo_url: string | null; translations?: Record<string, { name?: string; description?: string }> }
+interface Data { establishment: string; table: { label: string; accessOpen: boolean }; categories: { id: string; parent_id: string | null; name: string; translations?: Record<string, string> }[]; products: P[]; dailyMenu: DailyMenu | null }
 interface Line { key: string; p: P; option: string | null; qty: number; menu?: Record<string, string> }
 
 /** Carta digital del cliente: se abre con el QR o NFC de la mesa. */
@@ -19,6 +20,12 @@ export default function ClientMenu() {
   const [cat, setCat] = useState<string | null>(null);
   const [lines, setLines] = useState<Line[]>([]);
   const [detail, setDetail] = useState<P | null>(null);
+  const [lang, setLangState] = useState<Lang>(() => {
+    try { const v = localStorage.getItem('loryand.lang'); if (v && LANGS.some(([k]) => k === v)) return v as Lang; } catch { /* */ }
+    const nav = navigator.language.slice(0, 2);
+    return (LANGS.some(([k]) => k === nav) ? nav : 'es') as Lang;
+  });
+  const setLang = (l: Lang) => { setLangState(l); try { localStorage.setItem('loryand.lang', l); } catch { /* */ } };
   const [menuOpen, setMenuOpen] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
   const [code, setCode] = useState(() => { try { return sessionStorage.getItem(codeKey) ?? ''; } catch { return ''; } });
@@ -42,10 +49,10 @@ export default function ClientMenu() {
     if (!data || !cat) return [];
     const subs = data.categories.filter((c) => c.parent_id === cat);
     const inCat = data.products.filter((p) => p.category_id === cat);
-    const out = subs.map((s) => ({ title: s.name, items: inCat.filter((p) => p.subcategory_id === s.id) })).filter((s) => s.items.length);
+    const out = subs.map((s) => ({ title: trCategory(s, lang), items: inCat.filter((p) => p.subcategory_id === s.id) })).filter((s) => s.items.length);
     const rest = inCat.filter((p) => !p.subcategory_id);
     return rest.length ? [{ title: '', items: rest }, ...out] : out;
-  }, [data, cat]);
+  }, [data, cat, lang]);
 
   if (notFound) return <div className="center-page"><div className="card login"><h2>Mesa no encontrada</h2><p>Este enlace no corresponde a ninguna mesa activa. Avisa al camarero.</p></div></div>;
   if (!data) return <p className="muted" style={{ padding: '2rem' }}>Cargando carta…</p>;
@@ -83,13 +90,16 @@ export default function ClientMenu() {
   return (
     <div style={{ paddingBottom: 90 }}>
       <header className="hero" style={{ padding: '1.25rem 1rem' }}>
-        <div className="small" style={{ opacity: .85 }}>Mesa {data.table.label}</div>
+        <div className="spread"><span className="small" style={{ opacity: .85 }}>{tt('table', lang)} {data.table.label}</span>
+          <select aria-label="Idioma" value={lang} onChange={(e) => setLang(e.target.value as Lang)} style={{ width: 'auto', padding: '.2rem .4rem', background: 'rgba(255,255,255,.15)', color: '#fff', border: '1px solid rgba(255,255,255,.4)' }}>
+            {LANGS.map(([k, l]) => <option key={k} value={k} style={{ color: '#000' }}>{l}</option>)}
+          </select></div>
         <h1 style={{ margin: 0 }}>{data.establishment}</h1>
         <div className="row mt" style={{ gap: '.4rem' }}>
-          <button className={`chip ${view === 'menu' ? 'on' : ''}`} onClick={() => setView('menu')}>Carta</button>
-          <button className={`chip ${view === 'account' ? 'on' : ''}`} onClick={() => withCode(() => { loadAccount(); setView('account'); })}>Mi pedido</button>
-          <button className="chip" onClick={() => call('waiter')}>Llamar al camarero</button>
-          <button className="chip" onClick={() => call('pay')}>Quiero pagar</button>
+          <button className={`chip ${view === 'menu' ? 'on' : ''}`} onClick={() => setView('menu')}>{tt('menu', lang)}</button>
+          <button className={`chip ${view === 'account' ? 'on' : ''}`} onClick={() => withCode(() => { loadAccount(); setView('account'); })}>{tt('myOrder', lang)}</button>
+          <button className="chip" onClick={() => call('waiter')}>{tt('callWaiter', lang)}</button>
+          <button className="chip" onClick={() => call('pay')}>{tt('wantPay', lang)}</button>
         </div>
       </header>
       {sent && <div className="notice ok" style={{ margin: '1rem' }}>{sent} <button className="btn small ghost" onClick={() => setSent(null)}>✕</button></div>}
@@ -99,7 +109,7 @@ export default function ClientMenu() {
       {view === 'menu' ? (
         <div style={{ padding: '0 1rem' }}>
           <div className="chips" style={{ position: 'sticky', top: 0, background: 'var(--cream)', padding: '.75rem 0', zIndex: 2 }}>
-            {roots.map((c) => <button key={c.id} className={`chip ${cat === c.id ? 'on' : ''}`} onClick={() => setCat(c.id)}>{c.name}</button>)}
+            {roots.map((c) => <button key={c.id} className={`chip ${cat === c.id ? 'on' : ''}`} onClick={() => setCat(c.id)}>{trCategory(c, lang)}</button>)}
           </div>
           {data.dailyMenu && (
             <button className="card" style={{ width: '100%', textAlign: 'left', borderColor: 'var(--terra)', marginBottom: '1rem', cursor: 'pointer' }}
@@ -117,16 +127,16 @@ export default function ClientMenu() {
                   <button key={p.id} className="card" style={{ textAlign: 'left', display: 'flex', gap: '.75rem', cursor: 'pointer', width: '100%' }} onClick={() => setDetail(p)}>
                     {p.photo_url && <img src={p.photo_url} alt="" style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 8 }} />}
                     <span style={{ flex: 1 }}>
-                      <span className="spread"><strong>{p.name}</strong><strong>{money(p.price_cents)}</strong></span>
-                      {p.description && <span className="small muted" style={{ display: 'block' }}>{p.description}</span>}
-                      {p.allergens.length > 0 && <span className="small" style={{ display: 'block', color: 'var(--terra)' }}>Contiene: {p.allergens.map((a) => ALLERGENS[a]).join(', ')}</span>}
+                      <span className="spread"><strong>{trProduct(p, lang).name}</strong><strong>{money(p.price_cents)}</strong></span>
+                      {trProduct(p, lang).description && <span className="small muted" style={{ display: 'block' }}>{trProduct(p, lang).description}</span>}
+                      {p.allergens.length > 0 && <span className="small" style={{ display: 'block', color: 'var(--terra)' }}>{tt('contains', lang)}: {p.allergens.map((a) => allergenName(a, lang, ALLERGENS[a])).join(', ')}</span>}
                     </span>
                   </button>
                 ))}
               </div>
             </section>
           ))}
-          <p className="small muted">¿Alergias o intolerancias? Pregunta al personal antes de pedir. Las fotos son orientativas y no permiten descartar trazas.</p>
+          <p className="small muted">{tt('allergyNote', lang)}</p>
         </div>
       ) : (
         <div style={{ padding: '1rem' }} className="stack">
@@ -141,7 +151,7 @@ export default function ClientMenu() {
 
       {count > 0 && view === 'menu' && (
         <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, padding: '.75rem 1rem', background: 'var(--paper)', borderTop: '1px solid var(--line)' }}>
-          <button className="btn primary block" onClick={() => setCartOpen(true)}>Ver pedido · {count} · {money(total)}</button>
+          <button className="btn primary block" onClick={() => setCartOpen(true)}>{tt('viewOrder', lang)} · {count} · {money(total)}</button>
         </div>
       )}
 
@@ -154,28 +164,28 @@ export default function ClientMenu() {
         }} />
       )}
       {detail && (
-        <Modal title={detail.name} onClose={() => setDetail(null)}>
+        <Modal title={trProduct(detail, lang).name} onClose={() => setDetail(null)}>
           {detail.photo_url && <img src={detail.photo_url} alt="" style={{ width: '100%', borderRadius: 10 }} />}
-          {detail.description && <p>{detail.description}</p>}
-          <p className="small">{detail.allergens.length ? <>Alérgenos: {detail.allergens.map((a) => ALLERGENS[a]).join(', ')}</> : 'Sin alérgenos declarados. Ante cualquier alergia, consulta al personal.'}</p>
+          {trProduct(detail, lang).description && <p>{trProduct(detail, lang).description}</p>}
+          <p className="small">{detail.allergens.length ? <>Alérgenos: {detail.allergens.map((a) => allergenName(a, lang, ALLERGENS[a])).join(', ')}</> : 'Sin alérgenos declarados. Ante cualquier alergia, consulta al personal.'}</p>
           {data.table.accessOpen && (detail.options.length ? (
             <div className="grid tiles">{detail.options.map((o) => <button key={o} className="product-btn" onClick={() => add(detail, o)}><strong>{o}</strong><span className="small">{money(detail.price_cents)}</span></button>)}</div>
-          ) : <button className="btn primary block" onClick={() => add(detail, null)}>Añadir · {money(detail.price_cents)}</button>)}
+          ) : <button className="btn primary block" onClick={() => add(detail, null)}>{tt('add', lang)} · {money(detail.price_cents)}</button>)}
         </Modal>
       )}
 
       {cartOpen && (
-        <Modal title="Tu pedido" onClose={() => setCartOpen(false)}>
+        <Modal title={tt('yourOrder', lang)} onClose={() => setCartOpen(false)}>
           {lines.map((l) => (
             <div key={l.key} className="ticket-line">
-              <span>{l.p.name}{l.option && <div className="small muted">{l.option}</div>}<div className="small">{money(l.p.price_cents * l.qty)}</div></span>
+              <span>{trProduct(l.p, lang).name}{l.option && <div className="small muted">{l.option}</div>}<div className="small">{money(l.p.price_cents * l.qty)}</div></span>
               <span className="qty"><button onClick={() => setQty(l.key, l.qty - 1)}>−</button><strong>{l.qty}</strong><button onClick={() => setQty(l.key, l.qty + 1)}>+</button></span>
             </div>
           ))}
           <div className="spread mt"><strong>Total</strong><strong>{money(total)}</strong></div>
           <p className="small muted">Comprueba que pone Mesa {data.table.label}. Si no es tu mesa, no envíes el pedido y avisa al camarero.</p>
           <ErrorText error={error} />
-          <button className="btn primary block" disabled={busy} onClick={send}>{busy ? 'Enviando…' : 'Enviar pedido'}</button>
+          <button className="btn primary block" disabled={busy} onClick={send}>{busy ? '…' : tt('send', lang)}</button>
         </Modal>
       )}
 

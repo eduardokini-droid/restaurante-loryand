@@ -51,3 +51,10 @@ Cuando quieras sustituir la versión antigua, se hace lo mismo con `restaurante`
 - Cada cambio que se suba a GitHub (rama `main`) se publica solo.
 - Copias de seguridad: Render guarda copias diarias de la base de datos en los planes de pago
   (**loryand-db** → **Recovery**). La fase 3 añade además copias propias del programa.
+
+## 6. Traducción automática de la carta (opcional)
+Las traducciones se pueden escribir a mano en la ficha de cada producto. Para el botón
+«Traducir automáticamente desde el español» hace falta una clave de DeepL (https://www.deepl.com/pro-api,
+hay plan gratuito):
+1. En Render: servicio **restaurante-loryand** → **Environment** → **Add Environment Variable**.
+2. Nombre `DEEPL_API_KEY`, valor tu clave. Guarda: el servicio se reinicia solo.

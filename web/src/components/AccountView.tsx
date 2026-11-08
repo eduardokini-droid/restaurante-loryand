@@ -3,6 +3,7 @@ import { api, newRequestId } from '../lib/api';
 import { METHOD_LABEL, STATUS_LABEL, money, time, toCents } from '../lib/format';
 import { useLive } from '../lib/realtime';
 import { DocumentPrint } from './DocumentPrint';
+import { CustomerForm } from '../pages/Fidelizacion';
 import { ErrorText, Modal, useAction, useToast } from './ui';
 
 interface Item { id: string; orderNumber: number; name: string; option: string | null; unitCents: number; qty: number; destination: string; course: number; status: string; parentItemId: string | null }
@@ -10,6 +11,8 @@ export interface Account {
   id: string; tableId: string | null; tableLabel: string | null; barName: string | null; waiterName: string | null; status: string;
   items: Item[]; payments: { id: string; method: string; amountCents: number; createdAt: string }[];
   totalCents: number; paidCents: number; pendingCents: number; undeliveredCount: number; heldCourses: number[];
+  itemsTotalCents: number; discountCents: number; discounts: { id: string; label: string; amountCents: number }[];
+  customer: { id: string; name: string; points: number } | null;
 }
 
 const statusBadge = (s: string) => ({ ready: 'terra', received: 'terra', held: 'grey', cancelled: 'danger', delivered: '' } as Record<string, string>)[s] ?? 'warn';
@@ -81,11 +84,19 @@ export function AccountView({ accountId, onAddMore, onClosed }: { accountId: str
       </table>
 
       <div className="card">
+        {acc.discountCents > 0 && <>
+          <div className="spread small"><span>Consumiciones</span><span>{money(acc.itemsTotalCents)}</span></div>
+          {acc.discounts.map((d) => (
+            <div key={d.id} className="spread small"><span>{d.label}{acc.status === 'open' && <button className="btn ghost small" style={{ minHeight: 0, padding: '0 .4rem' }} title="Quitar" onClick={() => run(async () => { setAcc(await api(`/api/service/accounts/${acc.id}/discounts/${d.id}`, { method: 'DELETE' })); })}>✕</button>}</span><span>−{money(d.amountCents)}</span></div>
+          ))}
+        </>}
         <div className="spread"><span>Total</span><strong>{money(acc.totalCents)}</strong></div>
         {acc.paidCents > 0 && <div className="spread small"><span>Cobrado</span><span>{acc.payments.map((p) => `${METHOD_LABEL[p.method]} ${money(p.amountCents)}`).join(' · ')}</span></div>}
         <div className="spread"><span>Pendiente</span><strong style={{ color: acc.pendingCents ? 'var(--terra)' : undefined }}>{money(acc.pendingCents)}</strong></div>
       </div>
 
+      {acc.status === 'open' && <CustomerAndCoupon acc={acc} onChange={setAcc} />}
+      {acc.status !== 'open' && acc.customer && <p className="small muted">Cliente: {acc.customer.name} · {acc.customer.points} puntos</p>}
       <ErrorText error={error} />
       {acc.status === 'open' && (
         <div className="row">
@@ -151,5 +162,44 @@ function PayModal({ acc, onClose, onDone }: { acc: Account; onClose: () => void;
         {busy ? 'Registrando…' : `Confirmar cobro de ${money(amountCents || 0)}`}
       </button>
     </Modal>
+  );
+}
+
+/** Cliente de fidelización y cupón de la cuenta. El cupón descuenta; no es un cobro. */
+function CustomerAndCoupon({ acc, onChange }: { acc: Account; onChange: (a: Account) => void }) {
+  const [q, setQ] = useState('');
+  const [found, setFound] = useState<{ id: string; name: string; phone: string; points: number }[]>([]);
+  const [code, setCode] = useState('');
+  const [creating, setCreating] = useState(false);
+  const { busy, error, run } = useAction();
+  const toast = useToast();
+  useEffect(() => {
+    if (q.trim().length < 2) { setFound([]); return; }
+    const t = setTimeout(() => api(`/api/service/customers?q=${encodeURIComponent(q.trim())}`).then(setFound).catch(() => {}), 250);
+    return () => clearTimeout(t);
+  }, [q]);
+  const assign = (customerId: string | null) => run(async () => { onChange(await api(`/api/service/accounts/${acc.id}/customer`, { body: { customerId } })); setQ(''); setFound([]); });
+  const apply = () => run(async () => { onChange(await api(`/api/service/accounts/${acc.id}/coupon`, { body: { code } })); setCode(''); toast('Cupón aplicado'); });
+  return (
+    <details className="card">
+      <summary><strong>Cliente y cupón</strong> {acc.customer && <span className="badge">{acc.customer.name} · {acc.customer.points} pts</span>}</summary>
+      <div className="stack mt">
+        {acc.customer ? (
+          <div className="spread"><span>{acc.customer.name} sumará puntos al cobrar</span><button className="btn small ghost" disabled={busy} onClick={() => assign(null)}>Quitar cliente</button></div>
+        ) : (
+          <div>
+            <div className="row"><input style={{ maxWidth: 260 }} placeholder="Buscar cliente por nombre o teléfono" value={q} onChange={(e) => setQ(e.target.value)} />
+              <button className="btn small" onClick={() => setCreating(true)}>+ Nuevo</button></div>
+            {found.map((c) => <button key={c.id} className="btn small ghost" style={{ display: 'block' }} onClick={() => assign(c.id)}>{c.name} · {c.phone} · {c.points} pts</button>)}
+          </div>
+        )}
+        <div className="row">
+          <input style={{ maxWidth: 180, textTransform: 'uppercase' }} placeholder="Código de cupón" value={code} onChange={(e) => setCode(e.target.value)} />
+          <button className="btn small" disabled={busy || code.trim().length < 3} onClick={apply}>Aplicar cupón</button>
+        </div>
+        <ErrorText error={error} />
+      </div>
+      {creating && <CustomerForm initialName={q} onClose={() => setCreating(false)} onDone={(c) => { setCreating(false); assign(c.id); }} />}
+    </details>
   );
 }

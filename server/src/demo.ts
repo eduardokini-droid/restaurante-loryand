@@ -56,6 +56,25 @@ export async function seedDemo(opts: { createGestor: boolean; adminPassword: str
       await tx`insert into products (establishment_id, name, description, price_cents, category_id, subcategory_id, course, destination, options, allergens, vat_rate)
                values (${est}, ${name}, ${description}, ${price}, ${c}, ${s}, ${course}, ${destination}, ${options}, ${allergens}, 10)`;
     }
+    // Almacén, escandallos, fidelización e idiomas de ejemplo.
+    const pid = async (name: string) => (await tx`select id from products where establishment_id = ${est} and name = ${name}`)[0].id as string;
+    const item = async (name: string, unit: string, stock: number, min: number, cost: number, packQty: number | null = null, packUnit: string | null = null, productId: string | null = null) =>
+      (await tx`insert into stock_items (establishment_id, name, unit, stock, min_stock, cost_per_unit, pack_qty, pack_unit, product_id)
+                values (${est}, ${name}, ${unit}, ${stock}, ${min}, ${cost}, ${packQty}, ${packUnit}, ${productId}) returning id`)[0].id as string;
+    const rioja = await item('Vino Rioja (botella)', 'ud', 12, 6, 600, 0.75, 'l');
+    const patatas = await item('Patatas', 'kg', 25, 10, 120);
+    const aceite = await item('Aceite de oliva', 'l', 10, 3, 900);
+    await item('Refresco 33 cl', 'ud', 48, 24, 45, null, null, await pid('Refresco'));
+    await tx`insert into recipe_lines (product_id, item_id, qty, unit) values (${await pid('Copa de vino')}, ${rioja}, 150, 'ml')`;
+    await tx`insert into recipe_lines (product_id, item_id, qty, unit) values (${await pid('Patatas bravas')}, ${patatas}, 250, 'g'), (${await pid('Patatas bravas')}, ${aceite}, 30, 'ml')`;
+    const [lucia] = await tx`insert into customers (establishment_id, name, phone, points, marketing_consent) values (${est}, 'Lucía Martínez', '600000001', 120, true) returning id`;
+    await tx`insert into coupons (establishment_id, customer_id, code, description, kind, value, max_uses, valid_from) values (${est}, ${lucia.id}, 'BIENVENIDA', 'Un 10 % de descuento en tu próxima visita', 'percent', 10, 1, current_date)`;
+    for (const [name, en, fr, de] of [['Croquetas caseras', 'Homemade croquettes', 'Croquettes maison', 'Hausgemachte Kroketten'], ['Patatas bravas', 'Spicy potatoes', 'Pommes de terre épicées', 'Scharfe Kartoffeln'], ['Tarta de queso', 'Cheesecake', 'Gâteau au fromage', 'Käsekuchen']] as const) {
+      await tx`update products set translations = ${tx.json({ en: { name: en, description: '' }, fr: { name: fr, description: '' }, de: { name: de, description: '' } })} where establishment_id = ${est} and name = ${name}`;
+    }
+    for (const [name, en] of [['Comida', 'Food'], ['Bebidas', 'Drinks'], ['Entrantes', 'Starters'], ['Principales', 'Main courses'], ['Postres', 'Desserts']] as const) {
+      await tx`update categories set translations = ${tx.json({ en })} where establishment_id = ${est} and name = ${name}`;
+    }
     await tx`insert into daily_menus (establishment_id, name, price_cents, sections, active) values (${est}, 'Menú del día', 1450,
       ${tx.json({ first: ['Lentejas estofadas', 'Ensalada mixta', 'Gazpacho'], second: ['Merluza a la plancha', 'Pollo asado', 'Albóndigas'], dessert: ['Flan', 'Fruta del tiempo'], drink: ['Agua', 'Vino de la casa', 'Refresco'], coffee: [] })}, true)`;
     const tables: [string, string, number][] = [

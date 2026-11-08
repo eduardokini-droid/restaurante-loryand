@@ -13,6 +13,10 @@ import Kds from './Kds';
 import Plataforma from './Plataforma';
 import Reservas from './Reservas';
 import MenuDia from './MenuDia';
+import Plano from './Plano';
+import Almacen from './Almacen';
+import Fidelizacion from './Fidelizacion';
+import Copias from './Copias';
 import { Waitlist } from '../components/Waitlist';
 import { ServiceScreen } from '../components/ServiceScreen';
 
@@ -24,12 +28,16 @@ const NAV: { to: string; label: string; module: string }[] = [
   { to: 'cocina', label: 'Cocina', module: 'kitchen' },
   { to: 'barra', label: 'Barra', module: 'bar' },
   { to: 'caja', label: 'Ventas y caja', module: 'cash' },
+  { to: 'almacen', label: 'Almacén y rentabilidad', module: 'stock' },
+  { to: 'fidelizacion', label: 'Fidelización', module: 'loyalty' },
   { to: 'carta', label: 'Configuración y carta', module: 'config' },
   { to: 'menu', label: 'Menú del día', module: 'config' },
+  { to: 'plano', label: 'Plano del local', module: 'tables' },
   { to: 'mesas', label: 'Mesas y QR', module: 'tables' },
   { to: 'camareros', label: 'Camareros', module: 'waiters' },
   { to: 'usuarios', label: 'Usuarios y permisos', module: 'users' },
   { to: 'negocio', label: 'Datos del negocio', module: 'config' },
+  { to: 'copias', label: 'Copias de seguridad', module: 'admin' },
 ];
 
 export default function GestionLayout() {
@@ -39,7 +47,8 @@ export default function GestionLayout() {
   const isSuper = me.actor.role === 'superadmin';
   const selected = getSelectedEstablishment();
   if (isSuper && !selected) return <Plataforma />;
-  const nav = NAV.filter((n) => isSuper || me.modules.includes(n.module));
+  const isAdmin = isSuper || me.actor.role === 'admin';
+  const nav = NAV.filter((n) => isSuper || (n.module === 'admin' ? isAdmin : me.modules.includes(n.module)));
   const first = `/gestion/${nav[0]?.to ?? 'sala'}`;
   return (
     <div className="shell">
@@ -60,6 +69,10 @@ export default function GestionLayout() {
           <Route path="espera" element={<Waitlist />} />
           <Route path="reservas" element={<Reservas />} />
           <Route path="menu" element={<MenuDia />} />
+          <Route path="plano" element={<Plano />} />
+          <Route path="almacen" element={<Almacen />} />
+          <Route path="fidelizacion" element={<Fidelizacion />} />
+          <Route path="copias" element={<Copias />} />
           <Route path="cocina" element={<Kds destination="kitchen" />} />
           <Route path="barra" element={<Kds destination="bar" />} />
           <Route path="caja" element={<Caja />} />

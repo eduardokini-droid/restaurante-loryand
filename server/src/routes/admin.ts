@@ -52,6 +52,23 @@ const productSchema = z.object({
   translations: z.partialRecord(z.enum(LANGS), z.object({ name: z.string().max(120).default(''), description: z.string().max(600).default('') })).optional(),
 });
 
+/** Campos de producto SIN valores por defecto: al editar solo cambia lo que se envía. */
+const productEdit = z.object({
+  name: z.string().min(1).max(120),
+  description: z.string().max(600),
+  priceCents: z.number().int().min(0).max(1_000_000),
+  vatRate: z.union([z.literal(0), z.literal(4), z.literal(10), z.literal(21)]),
+  destination: z.enum(['kitchen', 'bar']),
+  course: z.number().int().min(1).max(5),
+  visible: z.boolean(),
+  options: z.union([z.string(), z.array(z.string())]).transform(splitOptions),
+  allergens: z.array(z.enum(ALLERGENS)),
+  categoryId: z.string().uuid().nullable(),
+  subcategoryId: z.string().uuid().nullable(),
+  photoUrl: z.string().url().max(500).nullable(),
+  translations: z.partialRecord(z.enum(LANGS), z.object({ name: z.string().max(120).default(''), description: z.string().max(600).default('') })),
+}).partial();
+
 const tableSchema = z.object({
   label: z.string().min(1).max(20),
   zone: z.enum(['salon', 'terraza', 'barra', 'reservado']).default('salon'),
@@ -62,6 +79,18 @@ const tableSchema = z.object({
   posY: z.number().int().min(0).max(100).nullable().optional(),
   shape: z.enum(['square', 'round', 'rect']).optional(),
 });
+/** Campos de mesa SIN valores por defecto, para editar. */
+const tableEdit = z.object({
+  label: z.string().min(1).max(20),
+  zone: z.enum(['salon', 'terraza', 'barra', 'reservado']),
+  seats: z.number().int().min(1).max(40),
+  active: z.boolean(),
+  joinGroup: z.string().max(20).nullable().transform((v) => (v?.trim() ? v.trim() : null)),
+  posX: z.number().int().min(0).max(100).nullable(),
+  posY: z.number().int().min(0).max(100).nullable(),
+  shape: z.enum(['square', 'round', 'rect']),
+  regenerateQr: z.literal(true),
+}).partial();
 
 const id = z.object({ id: z.string().uuid() });
 
@@ -280,7 +309,7 @@ export default async function adminRoutes(app: FastifyInstance) {
     }
   }
 
-  const productCols = (p: Partial<z.infer<typeof productSchema>>) => {
+  const productCols = (p: z.infer<typeof productEdit>) => {
     const m: Record<string, string> = {
       name: 'name', description: 'description', priceCents: 'price_cents', vatRate: 'vat_rate', destination: 'destination',
       course: 'course', visible: 'visible', options: 'options', allergens: 'allergens', categoryId: 'category_id',
@@ -307,7 +336,7 @@ export default async function adminRoutes(app: FastifyInstance) {
     const a = requireModule(req, 'config');
     const est = establishmentOf(req);
     const { id: pid } = parse(id, req.params);
-    const b = parse(productSchema.partial(), req.body);
+    const b = parse(productEdit, req.body);
     const [cur] = await sql`select category_id, subcategory_id, price_cents from products where id = ${pid} and establishment_id = ${est} and not archived`;
     if (!cur) throw notFound('Producto');
     const categoryId = b.categoryId !== undefined ? b.categoryId : cur.category_id;
@@ -377,7 +406,7 @@ export default async function adminRoutes(app: FastifyInstance) {
     requireModule(req, 'tables');
     const est = establishmentOf(req);
     const { id: tid } = parse(id, req.params);
-    const b = parse(tableSchema.partial().extend({ regenerateQr: z.literal(true).optional() }), req.body);
+    const b = parse(tableEdit, req.body);
     const { regenerateQr, joinGroup, posX, posY, ...cols } = b as typeof b & { joinGroup?: string | null };
     if (posX !== undefined) (cols as Record<string, unknown>).pos_x = posX;
     if (posY !== undefined) (cols as Record<string, unknown>).pos_y = posY;

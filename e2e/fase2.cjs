@@ -6,7 +6,7 @@ const OUT = process.argv[2];
   const browser = await chromium.launch();
   const errors = [];
   const watch = (p, n) => { p.on('pageerror', e => errors.push(`${n}: ${e.message}`)); };
-  const admin = await (await browser.newContext({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2 })).newPage(); watch(admin, 'admin');
+  const admin = await (await browser.newContext({ locale: 'es-ES', viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2 })).newPage(); watch(admin, 'admin');
   await admin.goto('http://localhost:3000/gestion');
   await admin.fill('input[autocomplete=username]', 'admin'); await admin.fill('input[type=password]', 'admin1234');
   await admin.click('button:has-text("Entrar")');
@@ -28,7 +28,7 @@ const OUT = process.argv[2];
   await admin.waitForSelector('text=Avisados');
 
   // 2. Formulario público de reservas
-  const cli = await (await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 })).newPage(); watch(cli, 'reserva');
+  const cli = await (await browser.newContext({ locale: 'es-ES', viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 })).newPage(); watch(cli, 'reserva');
   await cli.goto('http://localhost:3000/reservar/demo');
   await cli.fill('input[type=number]', '4');
   await cli.selectOption('select >> nth=0', '21:00');
@@ -47,7 +47,7 @@ const OUT = process.argv[2];
   await admin.screenshot({ path: `${OUT}/f2-3-reservas.png`, fullPage: true });
 
   // 3. Menú del día desde la PDA
-  const pda = await (await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 })).newPage(); watch(pda, 'pda');
+  const pda = await (await browser.newContext({ locale: 'es-ES', viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 })).newPage(); watch(pda, 'pda');
   await pda.goto('http://localhost:3000/personal');
   await pda.fill('input >> nth=0', 'demo'); await pda.fill('input >> nth=1', 'camarero-2'); await pda.fill('input[type=password]', '2222');
   await pda.click('button:has-text("Entrar")');

@@ -56,7 +56,10 @@ export default async function loyaltyRoutes(app: FastifyInstance) {
     requireModule(req, 'loyalty');
     const est = establishmentOf(req);
     const { id: cid } = parse(id, req.params);
-    const b = parse(customerSchema.partial().extend({ points: z.number().int().min(0).optional() }), req.body);
+    const b = parse(z.object({
+      name: z.string().min(1).max(100), phone: z.string().max(30).transform((v) => v.replace(/[\s.-]/g, '')),
+      email: z.string().max(120), notes: z.string().max(500), marketingConsent: z.boolean(), points: z.number().int().min(0),
+    }).partial(), req.body);
     const cols: Record<string, unknown> = {};
     for (const [k, c] of Object.entries({ name: 'name', phone: 'phone', email: 'email', notes: 'notes', marketingConsent: 'marketing_consent', points: 'points' })) {
       if (b[k as keyof typeof b] !== undefined) cols[c] = b[k as keyof typeof b];

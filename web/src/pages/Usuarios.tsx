@@ -4,7 +4,7 @@ import { ErrorText, useAction, useToast } from '../components/ui';
 
 const MODULE_LABEL: Record<string, string> = {
   tpv: 'TPV y sala', kitchen: 'Cocina', bar: 'Barra', cash: 'Ventas y caja', config: 'Configuración y carta',
-  tables: 'Mesas y QR', waiters: 'Camareros', users: 'Usuarios y permisos', reservations: 'Reservas',
+  tables: 'Mesas y QR', waiters: 'Camareros', users: 'Usuarios y permisos', reservations: 'Reservas', stock: 'Almacén', loyalty: 'Fidelización',
 };
 
 export default function Usuarios() {

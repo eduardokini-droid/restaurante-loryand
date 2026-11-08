@@ -258,3 +258,30 @@ describe('idiomas y plano', () => {
     expect(floor.tables[0]).toMatchObject({ pos_x: 40, pos_y: 25, shape: 'round' });
   });
 });
+
+describe('editar un campo no altera los demás', () => {
+  it('producto: cambiar el precio conserva opciones, alérgenos, destino, pase, visibilidad y categoría', async () => {
+    const [c] = await sql`insert into categories (establishment_id, name) values (${est}, 'Bebidas') returning id`;
+    const p = (await call(admin, 'POST', '/api/admin/products', {
+      name: 'Refresco', priceCents: 250, vatRate: 21, destination: 'bar', course: 3, visible: false,
+      options: 'Cola\nNaranja', allergens: ['sulfitos'], categoryId: c.id, description: 'Lata 33 cl',
+    })).json();
+    const u = (await call(admin, 'PATCH', `/api/admin/products/${p.id}`, { priceCents: 300 })).json();
+    expect(u).toMatchObject({ price_cents: 300, destination: 'bar', course: 3, visible: false, options: ['Cola', 'Naranja'], allergens: ['sulfitos'], category_id: c.id, description: 'Lata 33 cl' });
+    expect(Number(u.vat_rate)).toBe(21);
+  });
+
+  it('mesa: mover en el plano conserva plazas, zona y estado activo', async () => {
+    await call(admin, 'PATCH', `/api/admin/tables/${tableId}`, { seats: 2, zone: 'terraza', active: false });
+    await call(admin, 'PATCH', `/api/admin/tables/${tableId}`, { posX: 10, posY: 20 });
+    const [t] = await sql`select seats, zone, active, pos_x from tables where id = ${tableId}`;
+    expect(t).toMatchObject({ seats: 2, zone: 'terraza', active: false, pos_x: 10 });
+  });
+
+  it('cliente: cambiar los puntos conserva teléfono, correo y consentimiento', async () => {
+    const c = (await call(waiter, 'POST', '/api/loyalty/customers', { name: 'Ana', phone: '600', email: 'a@b.es', marketingConsent: true })).json();
+    await call(admin, 'PATCH', `/api/loyalty/customers/${c.id}`, { points: 50 });
+    const [x] = await sql`select phone, email, marketing_consent, points from customers where id = ${c.id}`;
+    expect(x).toMatchObject({ phone: '600', email: 'a@b.es', marketing_consent: true, points: 50 });
+  });
+});
