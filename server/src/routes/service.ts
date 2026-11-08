@@ -12,7 +12,7 @@ import { createOrder, fireNextCourse, orderInput, setItemsStatus } from '../serv
 import { paymentInput, registerPayment } from '../services/payments.js';
 import { convertToFull, issueDocument } from '../services/documents.js';
 import { setPhysicalState } from '../services/tables.js';
-import { autoPrintTicket, printFire, printOrder } from '../services/printing.js';
+import { autoOpenDrawer, autoPrintTicket, printFire, printOrder } from '../services/printing.js';
 
 const id = z.object({ id: z.string().uuid() });
 const who = (a: Actor) => ({ waiterId: a.kind === 'waiter' ? a.id : null, userId: a.kind === 'user' ? a.id : null });
@@ -185,6 +185,7 @@ export default async function serviceRoutes(app: FastifyInstance) {
     if (!r.duplicate) {
       notify(est, ['payments', 'tables', 'requests'], await tableTokenOfAccount(aid));
       if (r.documentId) await autoPrintTicket(est, r.documentId).catch((err) => req.log.error({ err }, 'Error al preparar el ticket impreso'));
+      if ((req.body as { method?: string }).method === 'cash') await autoOpenDrawer(est).catch((err) => req.log.error({ err }, 'Error al abrir el cajón'));
     }
     return r;
   });

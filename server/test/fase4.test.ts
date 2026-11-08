@@ -245,3 +245,15 @@ describe('WhatsApp', () => {
     expect(sent).toEqual(['recordatorio_reserva']);
   });
 });
+
+describe('seguridad', () => {
+  it('solo la notificación de Redsys acepta formularios web; el resto de la API exige JSON', async () => {
+    const form = { 'content-type': 'application/x-www-form-urlencoded', cookie: admin };
+    const r = await app.inject({ method: 'POST', url: '/api/admin/users', headers: form, payload: 'name=Intruso&username=intruso&password=12345678' });
+    expect(r.statusCode).toBe(415);
+    const p = await app.inject({ method: 'PUT', url: '/api/integrations/redsys', headers: form, payload: 'enabled=true' });
+    expect(p.statusCode).toBe(415);
+    const n = await app.inject({ method: 'POST', url: '/api/redsys/notify', headers: { 'content-type': 'application/x-www-form-urlencoded' }, payload: 'Ds_MerchantParameters=x&Ds_Signature=y' });
+    expect(n.body).toBe('KO');
+  });
+});

@@ -6,6 +6,8 @@ import { FloorGrid, TableControls, useFloor, type FloorTable } from './Floor';
 import { OrderBuilder, type OrderTarget } from './OrderBuilder';
 import { Empty } from './ui';
 import { WaiterAccess } from './WaiterAccess';
+import { CashPanel } from './CashPanel';
+import { Modal } from './ui';
 
 type View =
   | { kind: 'floor' }
@@ -18,6 +20,7 @@ export function ServiceScreen({ mode }: { mode: 'tpv' | 'pda' }) {
   const [view, setView] = useState<View>({ kind: 'floor' });
   const [newBar, setNewBar] = useState(false);
   const [access, setAccess] = useState(false);
+  const [cash, setCash] = useState(false);
 
   if (!floor) return <p className="muted">Cargando sala…</p>;
 
@@ -73,6 +76,7 @@ export function ServiceScreen({ mode }: { mode: 'tpv' | 'pda' }) {
       <div className="spread">
         <h2 style={{ margin: 0 }}>¿Dónde vas a atender?</h2>
         <span className="row">
+          {mode === 'tpv' && <button className="btn" onClick={() => setCash(true)}>Caja</button>}
           {mode === 'tpv' && <button className="btn" onClick={() => setAccess(true)}>Acceso camareros</button>}
           <button className="btn terra" onClick={() => setNewBar(true)}>+ Cliente de barra</button>
         </span>
@@ -94,6 +98,7 @@ export function ServiceScreen({ mode }: { mode: 'tpv' | 'pda' }) {
       )}
       <FloorGrid tables={floor.tables} onPick={openTable} />
       {access && <WaiterAccess onClose={() => setAccess(false)} />}
+      {cash && <Modal title="Caja" onClose={() => setCash(false)}><CashPanel compact /></Modal>}
       {newBar && <NewBarDialog mode={mode} existing={floor.bar.map((b) => b.bar_name.toLowerCase())} onClose={() => setNewBar(false)}
         onStart={(barName, waiterId) => {
           setNewBar(false);

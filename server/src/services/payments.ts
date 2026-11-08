@@ -72,9 +72,10 @@ export async function registerPayment(
     }
 
     const [p] = await tx`
-      insert into payments (establishment_id, account_id, method, amount_cents, tendered_cents, change_cents, idempotency_key, waiter_id, user_id)
+      insert into payments (establishment_id, account_id, method, amount_cents, tendered_cents, change_cents, idempotency_key, waiter_id, user_id, cash_session_id)
       values (${establishmentId}, ${accountId}, ${input.method}, ${input.amountCents}, ${input.tenderedCents ?? null}, ${changeCents},
-              ${input.idempotencyKey}, ${by.waiterId}, ${by.userId})
+              ${input.idempotencyKey}, ${by.waiterId}, ${by.userId},
+              (select id from cash_sessions where establishment_id = ${establishmentId} and status = 'open'))
       returning id`;
 
     const pending = s.pendingCents - input.amountCents;

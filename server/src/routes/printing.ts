@@ -76,7 +76,7 @@ export default async function printingRoutes(app: FastifyInstance) {
   app.put('/api/printing/settings', async (req) => {
     requireAdmin(req);
     const est = establishmentOf(req);
-    const b = parse(z.object({ kitchen: z.boolean(), bar: z.boolean(), ticket: z.boolean() }), req.body);
+    const b = parse(z.object({ kitchen: z.boolean(), bar: z.boolean(), ticket: z.boolean(), drawer: z.boolean().default(true) }), req.body);
     await sql`update establishments set settings = jsonb_set(settings, '{autoPrint}', ${sql.json(b)}) where id = ${est}`;
     return b;
   });

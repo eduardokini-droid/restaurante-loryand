@@ -27,10 +27,6 @@ async function saveIntegration(est: string, kind: 'redsys' | 'whatsapp', enabled
 }
 
 export default async function integrationRoutes(app: FastifyInstance) {
-  // Redsys notifica con un formulario (application/x-www-form-urlencoded).
-  app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_req, body, done) => {
-    done(null, Object.fromEntries(new URLSearchParams(body as string)));
-  });
 
   // ---------- Configuración (administrador) ----------
   app.get('/api/integrations', async (req) => {
@@ -188,13 +184,20 @@ export default async function integrationRoutes(app: FastifyInstance) {
   });
 
   // ---------- Notificación de Redsys ----------
-  app.post('/api/redsys/notify', async (req, reply) => {
-    const r = await handleNotification((req.body ?? {}) as Record<string, string>);
-    if (r.establishmentId) {
-      const [t] = await sql`select t.qr_token from accounts a join tables t on t.id = a.table_id where a.id = ${r.accountId ?? null}`;
-      notify(r.establishmentId, ['payments', 'tables', 'orders'], t?.qr_token);
-    }
-    reply.type('text/plain');
-    return r.ok ? 'OK' : 'KO';
+  // Plugin aislado: solo esta ruta acepta formularios web (application/x-www-form-urlencoded).
+  // El resto de la API únicamente acepta JSON, lo que evita envíos de formularios desde otras webs.
+  await app.register(async (redsys) => {
+    redsys.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_req, body, done) => {
+      done(null, Object.fromEntries(new URLSearchParams(body as string)));
+    });
+    redsys.post('/api/redsys/notify', async (req, reply) => {
+      const r = await handleNotification((req.body ?? {}) as Record<string, string>);
+      if (r.establishmentId) {
+        const [t] = await sql`select t.qr_token from accounts a join tables t on t.id = a.table_id where a.id = ${r.accountId ?? null}`;
+        notify(r.establishmentId, ['payments', 'tables', 'orders'], t?.qr_token);
+      }
+      reply.type('text/plain');
+      return r.ok ? 'OK' : 'KO';
+    });
   });
 }

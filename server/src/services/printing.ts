@@ -1,9 +1,9 @@
 import { sql, type Tx } from '../db.js';
-import { documentTicket, kitchenTicket } from './escpos.js';
+import { documentTicket, drawerKick, kitchenTicket, zReport } from './escpos.js';
 
 type Q = typeof sql | Tx;
-export interface AutoPrint { kitchen: boolean; bar: boolean; ticket: boolean }
-export const DEFAULT_AUTOPRINT: AutoPrint = { kitchen: true, bar: true, ticket: false };
+export interface AutoPrint { kitchen: boolean; bar: boolean; ticket: boolean; drawer: boolean }
+export const DEFAULT_AUTOPRINT: AutoPrint = { kitchen: true, bar: true, ticket: false, drawer: true };
 
 async function autoPrintOf(q: Q, est: string): Promise<AutoPrint> {
   const [e] = await q`select settings from establishments where id = ${est}`;
@@ -85,4 +85,26 @@ export async function printDocument(est: string, documentId: string, printerId?:
 export async function autoPrintTicket(est: string, documentId: string) {
   const auto = await autoPrintOf(sql, est);
   if (auto.ticket) await printDocument(est, documentId);
+}
+
+/** Abre el cajón portamonedas conectado a la impresora de tickets. */
+export async function openDrawer(est: string): Promise<number> {
+  const [p] = await printersFor(sql, est, 'ticket');
+  if (!p) return 0;
+  await enqueue(sql, est, p.id, 'drawer', 'Apertura de cajón', drawerKick());
+  return 1;
+}
+
+/** Al cobrar en efectivo, abre el cajón si está activado. */
+export async function autoOpenDrawer(est: string) {
+  const auto = await autoPrintOf(sql, est);
+  if (auto.drawer) await openDrawer(est);
+}
+
+export async function printZ(est: string, sessionId: string): Promise<number> {
+  const [s] = await sql`select c.report, e.name from cash_sessions c join establishments e on e.id = c.establishment_id where c.id = ${sessionId} and c.establishment_id = ${est} and c.status = 'closed'`;
+  const [p] = await printersFor(sql, est, 'ticket');
+  if (!s || !p) return 0;
+  await enqueue(sql, est, p.id, 'closing', `Cierre Z ${s.report.number}`, zReport(s.name, s.report, p.width_chars));
+  return 1;
 }

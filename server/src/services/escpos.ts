@@ -151,3 +151,32 @@ export function testTicket(printerName: string, establishment: string, width = 4
   t.line('1234567890'.repeat(Math.ceil(width / 10)).slice(0, width));
   return t.rule().align('center').line('Si lees bien esta línea, la impresora está lista.').cut().build();
 }
+
+/** Pulso de apertura del cajón portamonedas (conectado a la impresora de tickets, conector RJ11). */
+export function drawerKick(): Buffer {
+  return Buffer.from([ESC, 0x40, ESC, 0x70, 0x00, 0x19, 0xfa]);
+}
+
+/** Informe de cierre Z en la impresora de tickets. */
+export function zReport(est: string, r: any, width = 48): Buffer {
+  const t = new Ticket(width).align('center').bold(true).size(2).line(`CIERRE Z ${r.number}`).size(1).bold(false);
+  t.line(est).line(`${ddmmyy(r.openedAt)} - ${ddmmyy(r.closedAt)}`).line(`Cerrado por: ${r.closedBy}`).align('left').rule();
+  t.bold(true).line('COBROS').bold(false);
+  for (const [k, v] of Object.entries(r.byMethod as Record<string, { count: number; cents: number }>)) t.pair(`${METHOD[k] ?? k} (${v.count})`, euros(v.cents));
+  t.bold(true).pair('TOTAL COBRADO', euros(r.totalCents)).bold(false).rule();
+  t.bold(true).line('EFECTIVO EN CAJA').bold(false);
+  t.pair('Fondo inicial', euros(r.openingFloatCents)).pair('Cobros en efectivo', euros(r.byMethod.cash.cents));
+  if (r.movementsInCents) t.pair('Entradas', euros(r.movementsInCents));
+  if (r.movementsOutCents) t.pair('Salidas', `-${euros(r.movementsOutCents)}`);
+  t.pair('Esperado', euros(r.expectedCashCents)).pair('Contado', euros(r.countedCashCents));
+  t.bold(true).pair('DESCUADRE', `${r.differenceCents > 0 ? '+' : ''}${euros(r.differenceCents)}`).bold(false).rule();
+  t.line(`Tickets: ${r.documents.simplified}${r.documents.first ? ` (${r.documents.first} a ${r.documents.last})` : ''}`);
+  t.line(`Facturas completas: ${r.documents.full}`);
+  for (const v of r.vat) t.pair(`IVA ${v.rate}% base ${euros(v.baseCents)}`, euros(v.vatCents));
+  if (r.discountsCents) t.pair('Descuentos y cupones', euros(r.discountsCents));
+  t.line(`Productos anulados: ${r.cancelledItems}`).rule();
+  for (const w of r.byWaiter) t.pair(`${w.name} (${w.count})`, euros(w.cents));
+  if (r.pendingAccounts.length) { t.rule().bold(true).line('CUENTAS ABIERTAS AL CERRAR').bold(false); for (const p of r.pendingAccounts) t.pair(p.place, euros(p.pendingCents)); }
+  if (r.notes) t.rule().wrap(`Notas: ${r.notes}`);
+  return t.rule().cut().build();
+}

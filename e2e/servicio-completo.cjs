@@ -29,6 +29,8 @@ const OUT = process.argv[2];
   await pda.waitForSelector('text=¿Dónde vas a atender?');
   // Clave de la mesa 2 desde la PDA
   await pda.click('.table-tile:has(.label:text-is("2"))');
+  await pda.waitForTimeout(500);
+  if (await pda.locator('button:has-text("+ Añadir consumición")').count()) await pda.click('button:has-text("+ Añadir consumición")');
   await pda.waitForSelector('text=Mesa 2 · nueva comanda');
   await pda.click('button:has-text("Ver clave")');
   const code = (await pda.locator('strong[style*="letter-spacing"]').textContent()).trim();
@@ -40,7 +42,7 @@ const OUT = process.argv[2];
   await pda.click('.product-btn:has-text("Al punto")');
   await pda.screenshot({ path: `${OUT}/2-pda-comanda.png`, fullPage: true });
   await pda.click('button:has-text("Enviar comanda")');
-  await pda.waitForSelector('text=Pedido n.º 1 enviado');
+  await pda.waitForSelector('text=/Pedido n.º \\d+ enviado/');
   // 3. Cliente desde la carta (móvil) en la misma mesa
   const cli = await (await browser.newContext({ locale: 'es-ES', viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 })).newPage(); watch(cli, 'cliente');
   await cli.goto(`http://localhost:3000/carta/${t2.qr_token}`);
@@ -52,7 +54,7 @@ const OUT = process.argv[2];
   await cli.click('button:has-text("Enviar pedido")');
   await cli.fill('input[aria-label="Clave de la mesa"]', code);
   await cli.click('button:has-text("Continuar")');
-  await cli.waitForSelector('text=Pedido n.º 2 recibido');
+  await cli.waitForSelector('text=/Pedido n.º \\d+ recibido/');
   await cli.click('.chip:has-text("Quiero pagar")');
   // 4. Cocina
   const kit = await (await browser.newContext({ locale: 'es-ES', viewport: { width: 1280, height: 800 } })).newPage(); watch(kit, 'cocina');

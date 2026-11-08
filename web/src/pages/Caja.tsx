@@ -4,6 +4,8 @@ import { DOC_LABEL, METHOD_LABEL, dateTime, money, today } from '../lib/format';
 import { DocumentPrint } from '../components/DocumentPrint';
 import { ErrorText, useAction } from '../components/ui';
 import { OnlineConflicts } from '../components/OnlinePayment';
+import { useLive } from '../lib/realtime';
+import { CashHistory, CashPanel } from '../components/CashPanel';
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 
@@ -22,6 +24,8 @@ export default function Caja() {
     setStaff(await api(`/api/reports/waiters?from=${f}&to=${t}`));
   }), [from, to, docType, run]);
   useEffect(() => { load(); }, [docType]); // eslint-disable-line react-hooks/exhaustive-deps
+  // El resumen se actualiza solo al cobrar o al abrir/cerrar la caja.
+  useLive(() => { load(); }, ['payments'], { intervalMs: 60000 });
   const preset = (days: number | 'month' | 'week') => {
     const now = new Date(); let start = new Date(now);
     if (days === 'month') start = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -33,6 +37,7 @@ export default function Caja() {
   return (
     <div className="stack">
       <h1>Ventas y caja</h1>
+      <CashPanel />
       <div className="card row">
         <label style={{ margin: 0 }}>Desde<input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
         <label style={{ margin: 0 }}>Hasta<input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></label>
@@ -98,6 +103,7 @@ export default function Caja() {
           ))}</tbody>
         </table>
       </div>
+      <CashHistory />
       {doc && <DocumentPrint id={doc} onClose={() => setDoc(null)} />}
     </div>
   );

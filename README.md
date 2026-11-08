@@ -32,6 +32,7 @@ El manual pedía al personal que vigilara a mano varias cosas. Ahora las garanti
 - **Cobro**: efectivo con cambio, tarjeta y Bizum (registro manual), pagos parciales para dividir la cuenta, unir cuentas.
 - **Documentos**: proforma (marcada como no justificante de pago) y factura simplificada con numeración correlativa por serie y año y desglose de IVA.
 - **Ventas y caja**: periodos (hoy, semana, mes, 45 días), cobrado por forma de pago y por empleado, pendiente aparte, registro documental, impresión del cierre.
+- **Arqueo y cierre de caja**: apertura con fondo, entradas y salidas de efectivo con motivo, apertura del cajón portamonedas desde la impresora (automática al cobrar en efectivo y manual registrada), recuento ciego por billetes y monedas, descuadre y **cierre Z** correlativo con IVA, tickets, descuentos, anulaciones y cobros por empleado. Los cobros hechos con la caja cerrada pasan a la siguiente caja. El cierre lo hace quien tiene «Ventas y caja».
 - **Gestor general**: alta y desactivación de establecimientos.
 
 ### Fase 2
@@ -95,13 +96,14 @@ Direcciones: `/gestion` (panel), `/personal` (PDA), `/carta/<código-de-mesa>` (
 ## Pruebas
 
 ```bash
-npm test                    # 78 pruebas de integración contra PostgreSQL (base loryand_test)
+npm test                    # 82 pruebas de integración contra PostgreSQL (base loryand_test)
 node e2e/servicio-completo.cjs /tmp/capturas   # servicio completo en navegador real
 node e2e/fase2.cjs /tmp/capturas               # lista de espera, reservas, menú y factura completa
 node e2e/fase3.cjs /tmp/capturas               # plano, almacén, cupones, idiomas, copias y tarjeta
 node e2e/fase4.cjs /tmp/capturas               # cobro con QR (Redsys simulado) y aviso por WhatsApp
 node e2e/impresion.cjs /tmp/capturas           # agente real con impresora de red simulada
 node e2e/acceso.cjs /tmp/capturas              # acceso de camareros desde el TPV con QR de un solo uso + PIN
+node e2e/caja.cjs /tmp/capturas                # apertura, salida de efectivo, recuento y cierre Z
 ```
 
 Las pruebas cubren: comandas duplicadas, opciones obligatorias, pases retenidos, fichaje, modo exclusivo, cuentas de barra,
