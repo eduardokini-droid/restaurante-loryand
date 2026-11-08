@@ -56,6 +56,7 @@ export default function Kds({ destination }: { destination: 'kitchen' | 'bar' })
                 </div>
               ))}
               {open.length > 0 && <button className="btn primary block mt" disabled={busy} onClick={() => set(open.map((i) => i.id), 'ready')}>Todo listo</button>}
+              <button className="btn small ghost block" disabled={busy} onClick={() => run(async () => { await api(`/api/service/orders/${t.order_id}/reprint`, { body: {} }); })}>Reimprimir comanda</button>
             </div>
           );
         })}

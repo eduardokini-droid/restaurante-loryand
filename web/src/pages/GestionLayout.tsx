@@ -18,6 +18,7 @@ import Almacen from './Almacen';
 import Fidelizacion from './Fidelizacion';
 import Copias from './Copias';
 import Integraciones from './Integraciones';
+import Impresoras from './Impresoras';
 import { Waitlist } from '../components/Waitlist';
 import { ServiceScreen } from '../components/ServiceScreen';
 
@@ -39,6 +40,7 @@ const NAV: { to: string; label: string; module: string }[] = [
   { to: 'usuarios', label: 'Usuarios y permisos', module: 'users' },
   { to: 'negocio', label: 'Datos del negocio', module: 'config' },
   { to: 'integraciones', label: 'Pagos y WhatsApp', module: 'admin' },
+  { to: 'impresoras', label: 'Impresoras', module: 'admin' },
   { to: 'copias', label: 'Copias de seguridad', module: 'admin' },
 ];
 
@@ -76,6 +78,7 @@ export default function GestionLayout() {
           <Route path="fidelizacion" element={<Fidelizacion />} />
           <Route path="copias" element={<Copias />} />
           <Route path="integraciones" element={<Integraciones />} />
+          <Route path="impresoras" element={<Impresoras />} />
           <Route path="cocina" element={<Kds destination="kitchen" />} />
           <Route path="barra" element={<Kds destination="bar" />} />
           <Route path="caja" element={<Caja />} />

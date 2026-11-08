@@ -85,7 +85,7 @@ const OUT = process.argv[2];
   await pda.click('button:has-text("Entregado en mesa")');
   await pda.waitForTimeout(500);
   // 7. Cobro en efectivo con cambio
-  await pda.click('button:has-text("Cobrar")');
+  await pda.click('button:text-is("Cobrar")');
   await pda.fill('input[placeholder="Opcional"]', '50');
   await pda.screenshot({ path: `${OUT}/5-pda-cobro.png` });
   await pda.click('button:has-text("Confirmar cobro")');

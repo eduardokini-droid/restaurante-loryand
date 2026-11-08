@@ -84,3 +84,14 @@ En **Gestión → Pagos y WhatsApp**:
   plantillas aprobadas). Copia el identificador del número y un token de acceso permanente, crea las tres
   plantillas con las variables indicadas en la pantalla y prueba con «Enviar prueba» a tu móvil.
   En este modo también se envían recordatorios automáticos antes de cada reserva confirmada.
+
+## 9. Impresoras de tickets (Epson TM-T20II y compatibles)
+En **Gestión → Impresoras** (solo el administrador) están los pasos y los archivos del agente:
+1. En un ordenador del restaurante, instala Node.js (LTS) y descarga `agente.mjs` e `iniciar-agente.bat`.
+2. Pulsa **Nuevo agente**, copia el token y abre `iniciar-agente.bat`: pide la dirección del programa y el token.
+3. Añade la impresora:
+   - **Por red**: tipo «Red» y su IP (sale en la hoja de estado: apaga la impresora, mantén FEED y enciéndela).
+   - **Por USB en Windows**: instala el controlador de Epson, comparte la impresora con un nombre sencillo
+     (p. ej. `TICKETS`) y elige tipo «Windows» con ese nombre.
+4. Marca qué imprime cada una (cocina, barra, tickets) y pulsa **Imprimir prueba**: deben salir bien la ñ, las tildes y el €.
+5. Para que el agente arranque solo: `Windows + R` → `shell:startup` → acceso directo a `iniciar-agente.bat`.

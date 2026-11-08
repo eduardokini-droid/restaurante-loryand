@@ -61,6 +61,11 @@ El manual pedía al personal que vigilara a mano varias cosas. Ahora las garanti
   - **Modo automático** con la API oficial de WhatsApp Business (plantillas aprobadas por Meta).
   - Registro de avisos enviados, preparados o fallidos.
 
+### Impresión directa en impresoras de tickets
+- Impresoras térmicas **ESC/POS** (probado el formato para **Epson TM-T20II**; compatible con la mayoría: Star en modo ESC/POS, Bixolon, marcas blancas). Página de códigos PC858: ñ, tildes y €.
+- **Comandas automáticas** por puesto (cocina / barra) al enviar el pedido, con los pases en espera indicados; al «Marchar» se imprime ese pase. Ticket o factura en la impresora de caja (automático al cobrar, opcional).
+- **Agente de impresión** (`agent/`): un archivo para un ordenador del local (Windows, Mac, Linux o Raspberry Pi) que recoge los trabajos y los envía por red (puerto 9100), USB en Linux, impresora compartida de Windows o CUPS. Cola con reintentos: si se apaga, los trabajos salen al volver. La impresión nunca impide registrar comandas ni cobros.
+
 ## Puesta en marcha
 
 Requisitos: Node.js 22 y PostgreSQL 14 o superior.
@@ -89,11 +94,12 @@ Direcciones: `/gestion` (panel), `/personal` (PDA), `/carta/<código-de-mesa>` (
 ## Pruebas
 
 ```bash
-npm test                    # 64 pruebas de integración contra PostgreSQL (base loryand_test)
+npm test                    # 70 pruebas de integración contra PostgreSQL (base loryand_test)
 node e2e/servicio-completo.cjs /tmp/capturas   # servicio completo en navegador real
 node e2e/fase2.cjs /tmp/capturas               # lista de espera, reservas, menú y factura completa
 node e2e/fase3.cjs /tmp/capturas               # plano, almacén, cupones, idiomas, copias y tarjeta
 node e2e/fase4.cjs /tmp/capturas               # cobro con QR (Redsys simulado) y aviso por WhatsApp
+node e2e/impresion.cjs /tmp/capturas           # agente real con impresora de red simulada
 ```
 
 Las pruebas cubren: comandas duplicadas, opciones obligatorias, pases retenidos, fichaje, modo exclusivo, cuentas de barra,
@@ -103,7 +109,6 @@ estados físicos de la mesa, clave de la carta, límite de intentos, avisos sin 
 ## Hoja de ruta
 
 **Pendiente**
-- Impresión directa en impresoras de tickets (ESC/POS) sin el diálogo del navegador: depende del modelo de cada cliente.
 - **VERI\*FACTU** (al final; obligación prevista el 01/10/2028): registros de facturación con huella encadenada, QR en el ticket y envío a la AEAT. Validar con la asesoría.
 
 > Las funciones fiscales describen el comportamiento del programa: no certifican el cumplimiento normativo ni sustituyen la revisión de la asesoría.

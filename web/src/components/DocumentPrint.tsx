@@ -42,7 +42,8 @@ export function DocumentPrint({ id, onClose }: { id: string; onClose: () => void
         </div>
       </div>
       <div className="row mt">
-        <button className="btn primary" onClick={() => window.print()}>Imprimir</button>
+        <TicketPrinterButton id={d.id} />
+        <button className="btn" onClick={() => window.print()}>Imprimir desde el navegador</button>
         {d.type === 'simplified' && d.status === 'valid' && <button className="btn" onClick={() => setConverting(true)}>Factura completa…</button>}
       </div>
       {converting && <FullInvoiceForm documentId={d.id} onClose={() => setConverting(false)} onDone={(newId) => { setConverting(false); setDocId(newId); }} />}
@@ -73,5 +74,17 @@ function FullInvoiceForm({ documentId, onClose, onDone }: { documentId: string; 
       <ErrorText error={error} />
       <button className="btn primary block" disabled={busy || !f.name || !f.taxId || !f.address} onClick={save}>Emitir factura completa</button>
     </Modal>
+  );
+}
+
+/** Envía el documento a la impresora de tickets (a través del agente de impresión). */
+function TicketPrinterButton({ id }: { id: string }) {
+  const { busy, error, run } = useAction();
+  const toast = useToast();
+  return (
+    <>
+      <button className="btn primary" disabled={busy} onClick={() => run(async () => { await api(`/api/service/documents/${id}/print`, { body: {} }); toast('Enviado a la impresora de tickets'); })}>Imprimir ticket</button>
+      {error && <span className="error small">{error}</span>}
+    </>
   );
 }

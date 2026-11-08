@@ -62,7 +62,7 @@ const OUT = process.argv[2];
   await pda.click('button:has-text("Todo entregado")');
   await pda.waitForTimeout(600);
   await pda.screenshot({ path: `${OUT}/f3-2-cuenta-cupon.png`, fullPage: true });
-  await pda.click('button:has-text("Cobrar")');
+  await pda.click('button:text-is("Cobrar")');
   await pda.click('.modal .chip:has-text("Tarjeta")');
   await pda.click('button:has-text("Confirmar cobro")');
   await pda.waitForSelector('.doc');
