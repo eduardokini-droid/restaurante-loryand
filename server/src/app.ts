@@ -13,6 +13,9 @@ import serviceRoutes from './routes/service.js';
 import publicRoutes from './routes/public.js';
 import reportRoutes from './routes/reports.js';
 import platformRoutes from './routes/platform.js';
+import menuRoutes from './routes/menu.js';
+import reservationRoutes from './routes/reservations.js';
+import waitlistRoutes from './routes/waitlist.js';
 
 export async function buildApp(opts: { logger?: boolean } = {}) {
   const app = Fastify({ logger: opts.logger ?? false, trustProxy: true, bodyLimit: 1_000_000 });
@@ -37,6 +40,9 @@ export async function buildApp(opts: { logger?: boolean } = {}) {
   await app.register(publicRoutes);
   await app.register(reportRoutes);
   await app.register(platformRoutes);
+  await app.register(menuRoutes);
+  await app.register(reservationRoutes);
+  await app.register(waitlistRoutes);
 
   // En producción el servidor sirve también la aplicación web compilada.
   const webDist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../web/dist');

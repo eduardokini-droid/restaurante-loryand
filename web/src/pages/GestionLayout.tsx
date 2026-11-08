@@ -11,15 +11,21 @@ import Negocio from './Negocio';
 import Caja from './Caja';
 import Kds from './Kds';
 import Plataforma from './Plataforma';
+import Reservas from './Reservas';
+import MenuDia from './MenuDia';
+import { Waitlist } from '../components/Waitlist';
 import { ServiceScreen } from '../components/ServiceScreen';
 
 const NAV: { to: string; label: string; module: string }[] = [
   { to: 'sala', label: 'Sala', module: 'tpv' },
   { to: 'tpv', label: 'TPV', module: 'tpv' },
+  { to: 'espera', label: 'Lista de espera', module: 'tpv' },
+  { to: 'reservas', label: 'Reservas', module: 'reservations' },
   { to: 'cocina', label: 'Cocina', module: 'kitchen' },
   { to: 'barra', label: 'Barra', module: 'bar' },
   { to: 'caja', label: 'Ventas y caja', module: 'cash' },
   { to: 'carta', label: 'Configuración y carta', module: 'config' },
+  { to: 'menu', label: 'Menú del día', module: 'config' },
   { to: 'mesas', label: 'Mesas y QR', module: 'tables' },
   { to: 'camareros', label: 'Camareros', module: 'waiters' },
   { to: 'usuarios', label: 'Usuarios y permisos', module: 'users' },
@@ -51,6 +57,9 @@ export default function GestionLayout() {
           <Route index element={<Navigate to={first} replace />} />
           <Route path="sala" element={<Sala />} />
           <Route path="tpv" element={<ServiceScreen mode="tpv" />} />
+          <Route path="espera" element={<Waitlist />} />
+          <Route path="reservas" element={<Reservas />} />
+          <Route path="menu" element={<MenuDia />} />
           <Route path="cocina" element={<Kds destination="kitchen" />} />
           <Route path="barra" element={<Kds destination="bar" />} />
           <Route path="caja" element={<Caja />} />

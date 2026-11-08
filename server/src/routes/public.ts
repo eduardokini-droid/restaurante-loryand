@@ -43,7 +43,8 @@ export default async function publicRoutes(app: FastifyInstance) {
     const products = await sql`
       select id, name, description, price_cents, options, allergens, category_id, subcategory_id, photo_url, translations
       from products where establishment_id = ${t.establishment_id} and visible and not archived order by name`;
-    return { establishment: t.establishment_name, table: { label: t.label, accessOpen: t.access_open }, categories, products };
+    const [dailyMenu] = await sql`select name, price_cents, sections from daily_menus where establishment_id = ${t.establishment_id} and active`;
+    return { establishment: t.establishment_name, table: { label: t.label, accessOpen: t.access_open }, categories, products, dailyMenu: dailyMenu ?? null };
   });
 
   app.post('/api/public/table/:token/verify', async (req) => {

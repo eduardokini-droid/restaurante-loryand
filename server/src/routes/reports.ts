@@ -51,4 +51,26 @@ export default async function reportRoutes(app: FastifyInstance) {
         and (${q.type ?? null}::text is null or type = ${q.type ?? null})
       order by created_at desc limit 500`;
   });
+
+  /** Informe de camareros: fichajes, comandas tomadas y cobros realizados (capítulo 24). */
+  app.get('/api/reports/waiters', async (req) => {
+    requireModule(req, 'cash');
+    const est = establishmentOf(req);
+    const q = parse(z.object({ from: z.string().date(), to: z.string().date() }), req.query);
+    const from = `${q.from}T00:00:00`;
+    const to = `${q.to}T23:59:59.999`;
+    return sql`
+      select w.id, w.name, 'camarero-' || w.code as username,
+        coalesce((select json_agg(json_build_object('start', s.started_at, 'end', s.ended_at) order by s.started_at)
+                  from shifts s where s.waiter_id = w.id and s.started_at between ${from}::timestamp and ${to}::timestamp), '[]') as shifts,
+        coalesce((select sum(extract(epoch from (coalesce(s.ended_at, now()) - s.started_at)) / 60)::int
+                  from shifts s where s.waiter_id = w.id and s.started_at between ${from}::timestamp and ${to}::timestamp), 0) as worked_min,
+        (select count(*)::int from orders o where o.waiter_id = w.id and o.created_at between ${from}::timestamp and ${to}::timestamp) as orders,
+        coalesce((select sum(i.unit_cents * i.qty)::int from orders o join order_items i on i.order_id = o.id
+                  where o.waiter_id = w.id and i.status <> 'cancelled' and o.created_at between ${from}::timestamp and ${to}::timestamp), 0) as ordered_cents,
+        (select count(*)::int from payments p where p.waiter_id = w.id and p.created_at between ${from}::timestamp and ${to}::timestamp) as payments,
+        coalesce((select sum(p.amount_cents)::int from payments p where p.waiter_id = w.id and p.created_at between ${from}::timestamp and ${to}::timestamp), 0) as collected_cents
+      from waiters w where w.establishment_id = ${est}
+      order by w.name`;
+  });
 }

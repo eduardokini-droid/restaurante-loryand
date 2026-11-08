@@ -8,6 +8,7 @@ import Home from './pages/Home';
 import GestionLayout from './pages/GestionLayout';
 import Personal from './pages/Personal';
 import ClientMenu from './pages/ClientMenu';
+import Reservar from './pages/Reservar';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -16,6 +17,7 @@ createRoot(document.getElementById('root')!).render(
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/carta/:token" element={<ClientMenu />} />
+          <Route path="/reservar/:slug" element={<Reservar />} />
           <Route path="/gestion/*" element={<SessionProvider><GestionLayout /></SessionProvider>} />
           <Route path="/personal" element={<SessionProvider><Personal /></SessionProvider>} />
         </Routes>

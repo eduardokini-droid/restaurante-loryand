@@ -54,6 +54,7 @@ const tableSchema = z.object({
   zone: z.enum(['salon', 'terraza', 'barra', 'reservado']).default('salon'),
   seats: z.number().int().min(1).max(40).default(4),
   active: z.boolean().default(true),
+  joinGroup: z.string().max(20).nullable().optional().transform((v) => (v?.trim() ? v.trim() : null)),
 });
 
 const id = z.object({ id: z.string().uuid() });
@@ -335,7 +336,8 @@ export default async function adminRoutes(app: FastifyInstance) {
     const b = parse(tableSchema, req.body);
     const [dup] = await sql`select 1 from tables where establishment_id = ${est} and label = ${b.label}`;
     if (dup) throw conflict('table_exists', `Ya existe la mesa ${b.label}`);
-    const [t] = await sql`insert into tables ${sql({ establishment_id: est, ...b })} returning *`;
+    const { joinGroup, ...rest } = b;
+    const [t] = await sql`insert into tables ${sql({ establishment_id: est, ...rest, join_group: joinGroup ?? null })} returning *`;
     notify(est, ['tables']);
     return t;
   });
@@ -345,7 +347,8 @@ export default async function adminRoutes(app: FastifyInstance) {
     const est = establishmentOf(req);
     const { id: tid } = parse(id, req.params);
     const b = parse(tableSchema.partial().extend({ regenerateQr: z.literal(true).optional() }), req.body);
-    const { regenerateQr, ...cols } = b;
+    const { regenerateQr, joinGroup, ...cols } = b as typeof b & { joinGroup?: string | null };
+    if ('joinGroup' in (req.body as object)) (cols as Record<string, unknown>).join_group = joinGroup ?? null;
     if (Object.keys(cols).length) {
       const [t] = await sql`update tables set ${sql(cols as Record<string, unknown>)} where id = ${tid} and establishment_id = ${est} returning id`;
       if (!t) throw notFound('Mesa');

@@ -4,10 +4,11 @@ import { api, newRequestId } from '../lib/api';
 import { ALLERGENS, STATUS_LABEL, money } from '../lib/format';
 import { useLive } from '../lib/realtime';
 import { ErrorText, Modal, useAction } from '../components/ui';
+import { MenuChooser, type DailyMenu } from '../components/OrderBuilder';
 
 interface P { id: string; name: string; description: string; price_cents: number; options: string[]; allergens: string[]; category_id: string | null; subcategory_id: string | null; photo_url: string | null }
-interface Data { establishment: string; table: { label: string; accessOpen: boolean }; categories: { id: string; parent_id: string | null; name: string }[]; products: P[] }
-interface Line { key: string; p: P; option: string | null; qty: number }
+interface Data { establishment: string; table: { label: string; accessOpen: boolean }; categories: { id: string; parent_id: string | null; name: string }[]; products: P[]; dailyMenu: DailyMenu | null }
+interface Line { key: string; p: P; option: string | null; qty: number; menu?: Record<string, string> }
 
 /** Carta digital del cliente: se abre con el QR o NFC de la mesa. */
 export default function ClientMenu() {
@@ -18,6 +19,7 @@ export default function ClientMenu() {
   const [cat, setCat] = useState<string | null>(null);
   const [lines, setLines] = useState<Line[]>([]);
   const [detail, setDetail] = useState<P | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
   const [code, setCode] = useState(() => { try { return sessionStorage.getItem(codeKey) ?? ''; } catch { return ''; } });
   const [askCode, setAskCode] = useState<null | (() => void)>(null);
@@ -67,7 +69,7 @@ export default function ClientMenu() {
 
   const send = () => withCode(() => run(async () => {
     const r = await api(`/api/public/table/${token}/orders`, {
-      body: { accessCode: code || sessionStorage.getItem(codeKey), clientRequestId: requestId, items: lines.map((l) => ({ productId: l.p.id, qty: l.qty, option: l.option })) },
+      body: { accessCode: code || sessionStorage.getItem(codeKey), clientRequestId: requestId, items: lines.flatMap<object>((l) => l.menu ? Array.from({ length: l.qty }, () => ({ menu: l.menu })) : [{ productId: l.p.id, qty: l.qty, option: l.option }]) },
     }).catch(handleCodeError);
     setLines([]); setCartOpen(false); setRequestId(newRequestId());
     setSent(`Pedido n.º ${r.number} recibido. Ya está en cocina o barra.`);
@@ -99,6 +101,14 @@ export default function ClientMenu() {
           <div className="chips" style={{ position: 'sticky', top: 0, background: 'var(--cream)', padding: '.75rem 0', zIndex: 2 }}>
             {roots.map((c) => <button key={c.id} className={`chip ${cat === c.id ? 'on' : ''}`} onClick={() => setCat(c.id)}>{c.name}</button>)}
           </div>
+          {data.dailyMenu && (
+            <button className="card" style={{ width: '100%', textAlign: 'left', borderColor: 'var(--terra)', marginBottom: '1rem', cursor: 'pointer' }}
+              onClick={() => data.table.accessOpen && setMenuOpen(true)}>
+              <span className="spread"><strong style={{ color: 'var(--terra)' }}>{data.dailyMenu.name}</strong><strong>{money(data.dailyMenu.price_cents)}</strong></span>
+              <span className="small muted" style={{ display: 'block' }}>{[['first', 'Primero'], ['second', 'Segundo'], ['dessert', 'Postre'], ['drink', 'Bebida'], ['coffee', 'Café']]
+                .filter(([k]) => data.dailyMenu!.sections[k]?.length).map(([k, l]) => `${l}: ${data.dailyMenu!.sections[k].join(', ')}`).join(' · ')}</span>
+            </button>
+          )}
           {sections.map((s) => (
             <section key={s.title} style={{ marginBottom: '1rem' }}>
               {s.title && <h2>{s.title}</h2>}
@@ -135,6 +145,14 @@ export default function ClientMenu() {
         </div>
       )}
 
+      {menuOpen && data.dailyMenu && (
+        <MenuChooser menu={data.dailyMenu} onClose={() => setMenuOpen(false)} onAdd={(choice) => {
+          const dm = data.dailyMenu!;
+          const p: P = { id: 'menu', name: dm.name, description: '', price_cents: dm.price_cents, options: [], allergens: [], category_id: null, subcategory_id: null, photo_url: null };
+          setLines((ls) => [...ls, { key: `menu|${Date.now()}|${Math.random()}`, p, option: Object.values(choice).join(' · '), qty: 1, menu: choice }]);
+          setMenuOpen(false);
+        }} />
+      )}
       {detail && (
         <Modal title={detail.name} onClose={() => setDetail(null)}>
           {detail.photo_url && <img src={detail.photo_url} alt="" style={{ width: '100%', borderRadius: 10 }} />}

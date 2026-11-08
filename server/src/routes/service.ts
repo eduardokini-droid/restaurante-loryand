@@ -9,7 +9,8 @@ import { audit } from '../services/audit.js';
 import { accountSummary, mergeAccounts } from '../services/accounts.js';
 import { createOrder, fireNextCourse, orderInput, setItemsStatus } from '../services/orders.js';
 import { paymentInput, registerPayment } from '../services/payments.js';
-import { issueDocument } from '../services/documents.js';
+import { convertToFull, issueDocument } from '../services/documents.js';
+import { setPhysicalState } from '../services/tables.js';
 
 const id = z.object({ id: z.string().uuid() });
 const who = (a: Actor) => ({ waiterId: a.kind === 'waiter' ? a.id : null, userId: a.kind === 'user' ? a.id : null });
@@ -61,7 +62,7 @@ export default async function serviceRoutes(app: FastifyInstance) {
       left join accounts a on a.table_id = t.id and a.status = 'open'
       left join lateral (
         select sum(i.unit_cents * i.qty) filter (where i.status <> 'cancelled') as total,
-               count(*) filter (where i.status not in ('delivered','cancelled')) as undelivered,
+               count(*) filter (where i.destination <> 'none' and i.status not in ('delivered','cancelled')) as undelivered,
                count(*) filter (where i.status = 'ready') as ready,
                count(*) filter (where i.status = 'held') as held
         from orders o join order_items i on i.order_id = o.id where o.account_id = a.id) x on true
@@ -93,7 +94,8 @@ export default async function serviceRoutes(app: FastifyInstance) {
       select i.product_id, sum(i.qty)::int as n from order_items i join orders o on o.id = i.order_id
       where o.establishment_id = ${est} and o.created_at > now() - interval '30 days' and i.status <> 'cancelled'
       group by i.product_id order by n desc limit 12`;
-    return { categories, products, bestSellers: best.map((b) => b.product_id) };
+    const [dailyMenu] = await sql`select name, price_cents, sections from daily_menus where establishment_id = ${est} and active`;
+    return { categories, products, bestSellers: best.map((b) => b.product_id), dailyMenu: dailyMenu ?? null };
   });
 
   app.get('/api/service/waiters', async (req) => {
@@ -206,6 +208,35 @@ export default async function serviceRoutes(app: FastifyInstance) {
     return d;
   });
 
+  /** Factura completa a partir de un ticket (capítulo 18). */
+  app.post('/api/service/documents/:id/full', async (req) => {
+    const a = requireService(req);
+    const est = establishmentOf(req);
+    const { id: did } = parse(id, req.params);
+    const customer = parse(z.object({
+      name: z.string().min(2, 'indica el nombre o la razón social').max(160),
+      taxId: z.string().regex(/^[A-Za-z0-9]{8,12}$/, 'NIF/CIF no válido'),
+      address: z.string().min(3, 'indica la dirección').max(200),
+      postalCode: z.string().max(10).default(''),
+      city: z.string().max(80).default(''),
+      email: z.string().max(120).default(''),
+    }), req.body);
+    const r = await sql.begin(async (tx) => {
+      await tx`select id from establishments where id = ${est} for update`;
+      const out = await convertToFull(tx, est, did, { ...customer, taxId: customer.taxId.toUpperCase() });
+      if ('error' in out) {
+        const msg = {
+          not_found: 'Documento no encontrado', not_simplified: 'Solo se puede convertir una factura simplificada (ticket)',
+          already_replaced: 'Este ticket ya se convirtió en factura completa', other_quarter: 'La conversión solo se permite dentro del mismo trimestre de la operación',
+        }[out.error!];
+        throw conflict(out.error!, msg);
+      }
+      await audit(tx, est, actorLabel(a), 'document.full', { from: did, to: out.document.id });
+      return out.document;
+    });
+    return r;
+  });
+
   app.get('/api/service/accounts/:id/documents', async (req) => {
     requireService(req);
     const { id: aid } = parse(id, req.params);
@@ -244,9 +275,7 @@ export default async function serviceRoutes(app: FastifyInstance) {
             and exists (select 1 from orders o join order_items i on i.order_id = o.id where o.account_id = a.id and i.status <> 'cancelled')`;
         if (open) throw conflict('pending_account', 'La mesa tiene una cuenta pendiente de cobro');
       }
-      await tx`update tables set physical_state = ${state} where id = ${tid}`;
-      // Al quedar libre se renueva la clave de acceso para que el grupo anterior no pueda pedir.
-      if (state === 'free') await tx`update tables set access_code = lpad((floor(random()*10000))::int::text, 4, '0') where id = ${tid}`;
+      await setPhysicalState(tx, tid, state);
       await audit(tx, est, actorLabel(a), 'table.state', { tableId: tid, from: t.physical_state, to: state });
     });
     notify(est, ['tables']);

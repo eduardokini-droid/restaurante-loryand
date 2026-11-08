@@ -39,3 +39,24 @@ export async function issueDocument(tx: Tx, establishmentId: string, accountId: 
     returning id, series, number, total_cents, created_at`;
   return doc;
 }
+
+/**
+ * Convierte una factura simplificada (ticket) en factura completa con los datos fiscales del cliente.
+ * Regla del programa: la conversión debe hacerse dentro del mismo trimestre natural y año de la operación.
+ * El ticket queda marcado como sustituido para no duplicar importes en los resúmenes.
+ */
+export async function convertToFull(tx: Tx, establishmentId: string, documentId: string, customer: Record<string, string>) {
+  const [d] = await tx`
+    select id, type, status, account_id, created_at,
+           (extract(year from created_at at time zone 'Europe/Madrid') = extract(year from now() at time zone 'Europe/Madrid')
+            and extract(quarter from created_at at time zone 'Europe/Madrid') = extract(quarter from now() at time zone 'Europe/Madrid')) as same_quarter
+    from documents where id = ${documentId} and establishment_id = ${establishmentId} for update`;
+  if (!d) return { error: 'not_found' as const };
+  if (d.type !== 'simplified') return { error: 'not_simplified' as const };
+  if (d.status !== 'valid') return { error: 'already_replaced' as const };
+  if (!d.same_quarter) return { error: 'other_quarter' as const };
+  const full = await issueDocument(tx, establishmentId, d.account_id, 'full', customer);
+  await tx`update documents set replaces_id = ${d.id} where id = ${full.id}`;
+  await tx`update documents set status = 'replaced' where id = ${d.id}`;
+  return { document: full };
+}

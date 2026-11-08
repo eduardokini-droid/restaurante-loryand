@@ -19,7 +19,9 @@ El manual pedía al personal que vigilara a mano varias cosas. Ahora las garanti
 | Borrar un producto cambiaba el historial | Los pedidos guardan nombre y precio del momento de la venta. «Eliminar» archiva el producto. |
 | Registro de quién hizo qué | Registro de auditoría: cambios de precio, anulaciones, marchas, uniones de cuentas, cambios de estado de mesa. |
 
-## Funciones incluidas (fase 1)
+## Funciones incluidas
+
+### Fase 1
 
 - **Gestión**: datos del negocio, carta (categorías, subcategorías, opciones, alérgenos, IVA, destino, pases), mesas con QR y enlace para NFC, etiquetas QR imprimibles, camareros con PIN y QR personal, mesas compartidas o asignación exclusiva, usuarios secundarios con permisos por módulo.
 - **PDA del camarero** (en el móvil): fichaje de entrada y salida, plano de mesas, comandas por pases, «Marchar ahora», avisos de clientes, platos listos (Recibido / Entregado), clave de acceso de la mesa, cobro, cola sin conexión.
@@ -30,6 +32,14 @@ El manual pedía al personal que vigilara a mano varias cosas. Ahora las garanti
 - **Documentos**: proforma (marcada como no justificante de pago) y factura simplificada con numeración correlativa por serie y año y desglose de IVA.
 - **Ventas y caja**: periodos (hoy, semana, mes, 45 días), cobrado por forma de pago y por empleado, pendiente aparte, registro documental, impresión del cierre.
 - **Gestor general**: alta y desactivación de establecimientos.
+
+### Fase 2
+- **Menú del día**: precio por persona, apartados (primero, segundo, postre, bebida, café) con hasta 20 alternativas. Cada persona elige sus platos desde TPV, PDA o carta; el precio se cobra una vez y cada plato va a cocina o barra con su pase.
+- **Reservas y turnos**: turnos de comida y cena, duración, margen de cortesía, política de cancelación, fianza por persona a partir de N comensales (no se confirma sin fianza pagada), detección de solapes de mesa y **formulario público** en `/reservar/<local>` que crea solicitudes, no reservas confirmadas.
+- **Lista de espera**: propuesta de mesa al grupo más antiguo que quepa con la capacidad más ajustada y respetando su zona; uniones de mesas definidas por el local (suman plazas); mesa protegida al avisar; reservas de las próximas dos horas protegidas; «Ya están sentados», liberar, no presentado.
+- **Tiempo estimado de espera** (nuevo): calculado con la duración media real de las mesas del local y su estado (ocupada, pagada, pendiente de limpiar).
+- **Factura completa** a partir del ticket con datos fiscales del cliente, dentro del mismo trimestre; el ticket queda sustituido y no duplica importes.
+- **Control de camareros**: fichajes, horas, comandas tomadas y cobros realizados por periodo.
 
 ## Puesta en marcha
 
@@ -59,8 +69,9 @@ Direcciones: `/gestion` (panel), `/personal` (PDA), `/carta/<código-de-mesa>` (
 ## Pruebas
 
 ```bash
-npm test                    # 21 pruebas de integración contra PostgreSQL (base loryand_test)
+npm test                    # 35 pruebas de integración contra PostgreSQL (base loryand_test)
 node e2e/servicio-completo.cjs /tmp/capturas   # servicio completo en navegador real
+node e2e/fase2.cjs /tmp/capturas               # lista de espera, reservas, menú y factura completa
 ```
 
 Las pruebas cubren: comandas duplicadas, opciones obligatorias, pases retenidos, fichaje, modo exclusivo, cuentas de barra,
@@ -69,15 +80,8 @@ estados físicos de la mesa, clave de la carta, límite de intentos, avisos sin 
 
 ## Hoja de ruta
 
-**Fase 2 · Servicio completo**
-- Reservas y turnos con formulario público y fianzas (cap. 19).
-- Lista de espera con propuesta de mesa, **tiempo estimado de espera** y unión de mesas (cap. 20).
-- Plano visual del local con posiciones arrastrables (cap. 10).
-- Menú del día (cap. 8).
-- Factura completa con datos del cliente y conversión desde ticket (cap. 18).
-- Informe de camareros con fichajes (cap. 24).
-
 **Fase 3 · Gestión**
+- Plano visual del local con posiciones arrastrables (cap. 10).
 - Almacén, compras y mermas; escandallos con **control de unidades** (ml/l, g/kg) para evitar el error de «30 litros» (cap. 21-22).
 - Fidelización y cupones (cap. 23).
 - Copias de seguridad automáticas que **sí incluyen** lista de espera y estados de mesa, con verificación previa a restaurar (cap. 25).

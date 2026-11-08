@@ -5,7 +5,7 @@ import { sql } from './db.js';
 import { config } from './config.js';
 import { AppError, forbidden } from './errors.js';
 
-export const MODULES = ['config', 'tables', 'waiters', 'users', 'tpv', 'kitchen', 'bar', 'cash'] as const;
+export const MODULES = ['config', 'tables', 'waiters', 'users', 'tpv', 'kitchen', 'bar', 'cash', 'reservations'] as const;
 export type Module = (typeof MODULES)[number];
 
 export type Actor =

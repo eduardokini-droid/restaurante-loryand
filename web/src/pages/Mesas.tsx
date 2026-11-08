@@ -5,7 +5,7 @@ import { ZONE_LABEL } from '../lib/format';
 import { useSession } from '../lib/session';
 import { ErrorText, Modal, useAction } from '../components/ui';
 
-interface Table { id: string; label: string; zone: string; seats: number; active: boolean; qr_token: string }
+interface Table { id: string; label: string; zone: string; seats: number; active: boolean; qr_token: string; join_group: string | null }
 export const tableUrl = (token: string) => `${location.origin}/carta/${token}`;
 
 export default function Mesas() {
@@ -30,15 +30,17 @@ export default function Mesas() {
         <button className="btn primary" disabled={busy || !form.label.trim()} onClick={add}>Añadir mesa</button>
       </div>
       <ErrorText error={error} />
+      <p className="small muted">Unión: escribe la misma etiqueta (por ejemplo «A») en las mesas que juntáis habitualmente. La lista de espera las ofrecerá como una sola mesa con la suma de plazas; el programa no une mesas por su cuenta.</p>
       <div className="card" style={{ overflowX: 'auto' }}>
         <table className="list">
-          <thead><tr><th>Mesa</th><th>Zona</th><th>Plazas</th><th>Enlace de la mesa (QR / NFC)</th><th>Activa</th></tr></thead>
+          <thead><tr><th>Mesa</th><th>Zona</th><th>Plazas</th><th title="Mesas con la misma etiqueta se ofrecen juntas en la lista de espera y suman plazas">Unión</th><th>Enlace de la mesa (QR / NFC)</th><th>Activa</th></tr></thead>
           <tbody>
             {tables.map((t) => (
               <tr key={t.id}>
                 <td><strong>{t.label}</strong></td>
                 <td><select value={t.zone} onChange={(e) => patch(t, { zone: e.target.value })}>{Object.entries(ZONE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></td>
                 <td><input type="number" min={1} style={{ width: 70 }} defaultValue={t.seats} onBlur={(e) => Number(e.target.value) !== t.seats && patch(t, { seats: Number(e.target.value) })} /></td>
+                <td><input style={{ width: 70 }} placeholder="—" defaultValue={t.join_group ?? ''} onBlur={(e) => (e.target.value.trim() || null) !== t.join_group && patch(t, { joinGroup: e.target.value })} /></td>
                 <td className="small">
                   <code style={{ wordBreak: 'break-all' }}>{tableUrl(t.qr_token)}</code>
                   <div className="row" style={{ gap: '.3rem' }}>

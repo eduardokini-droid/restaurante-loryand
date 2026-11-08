@@ -16,7 +16,8 @@ export interface AccountSummary {
   closedAt: string | null;
   items: Array<{
     id: string; orderId: string; orderNumber: number; name: string; option: string | null;
-    unitCents: number; vatRate: number; qty: number; destination: 'kitchen' | 'bar'; course: number; status: string;
+    unitCents: number; vatRate: number; qty: number; destination: 'kitchen' | 'bar' | 'none'; course: number; status: string;
+    parentItemId: string | null;
     createdAt: string;
   }>;
   payments: Array<{ id: string; method: string; amountCents: number; createdAt: string }>;
@@ -39,7 +40,7 @@ export async function accountSummary(q: Q, accountId: string, establishmentId?: 
     select i.*, o.number as order_number, o.created_at as order_created_at
     from order_items i join orders o on o.id = i.order_id
     where o.account_id = ${accountId}
-    order by o.number, i.course, i.name`;
+    order by o.number, coalesce(i.parent_item_id, i.id), i.parent_item_id nulls first, i.course, i.name`;
   const payments = await q`select id, method, amount_cents, created_at from payments where account_id = ${accountId} order by created_at`;
   const live = items.filter((i) => i.status !== 'cancelled');
   const totalCents = live.reduce((s, i) => s + i.unit_cents * i.qty, 0);
@@ -58,13 +59,13 @@ export async function accountSummary(q: Q, accountId: string, establishmentId?: 
     items: items.map((i) => ({
       id: i.id, orderId: i.order_id, orderNumber: i.order_number, name: i.name, option: i.option,
       unitCents: i.unit_cents, vatRate: Number(i.vat_rate), qty: i.qty, destination: i.destination,
-      course: i.course, status: i.status, createdAt: i.order_created_at,
+      course: i.course, status: i.status, createdAt: i.order_created_at, parentItemId: i.parent_item_id,
     })),
     payments: payments.map((p) => ({ id: p.id, method: p.method, amountCents: p.amount_cents, createdAt: p.created_at })),
     totalCents,
     paidCents,
     pendingCents: totalCents - paidCents,
-    undeliveredCount: live.filter((i) => i.status !== 'delivered').length,
+    undeliveredCount: live.filter((i) => i.destination !== 'none' && i.status !== 'delivered').length,
     heldCourses: [...new Set(live.filter((i) => i.status === 'held').map((i) => i.course as number))].sort(),
   };
 }

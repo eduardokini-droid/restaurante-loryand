@@ -62,12 +62,15 @@ await sql.begin(async (tx) => {
     await tx`insert into products (establishment_id, name, description, price_cents, category_id, subcategory_id, course, destination, options, allergens, vat_rate)
              values (${est}, ${name}, ${description}, ${price}, ${c}, ${s}, ${course}, ${destination}, ${options}, ${allergens}, 10)`;
   }
+  await tx`insert into daily_menus (establishment_id, name, price_cents, sections, active) values (${est}, 'Menú del día', 1450,
+    ${tx.json({ first: ['Lentejas estofadas', 'Ensalada mixta', 'Gazpacho'], second: ['Merluza a la plancha', 'Pollo asado', 'Albóndigas'], dessert: ['Flan', 'Fruta del tiempo'], drink: ['Agua', 'Vino de la casa', 'Refresco'], coffee: [] })}, true)`;
   const tables: [string, string, number][] = [
     ['1', 'salon', 2], ['2', 'salon', 4], ['3', 'salon', 4], ['4', 'salon', 6],
     ['T1', 'terraza', 4], ['T2', 'terraza', 4], ['T3', 'terraza', 2], ['R1', 'reservado', 10],
   ];
   for (const [label, zone, seats] of tables) {
-    await tx`insert into tables (establishment_id, label, zone, seats) values (${est}, ${label}, ${zone}, ${seats})`;
+    // Las mesas 2 y 3 se juntan habitualmente (unión "A").
+    await tx`insert into tables (establishment_id, label, zone, seats, join_group) values (${est}, ${label}, ${zone}, ${seats}, ${['2', '3'].includes(label) ? 'A' : null})`;
   }
 });
 

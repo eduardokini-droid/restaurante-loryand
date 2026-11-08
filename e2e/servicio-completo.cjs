@@ -44,7 +44,7 @@ const OUT = process.argv[2];
   const cli = await (await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 })).newPage(); watch(cli, 'cliente');
   await cli.goto(`http://localhost:3000/carta/${t2.qr_token}`);
   await cli.click('.chip:has-text("Bebidas")');
-  await cli.click('.card:has-text("Refresco")');
+  await cli.click('section .card:has-text("Refresco")');
   await cli.click('.product-btn:has-text("Coca-Cola Zero")');
   await cli.screenshot({ path: `${OUT}/3-carta-cliente.png`, fullPage: false });
   await cli.click('button:has-text("Ver pedido")');

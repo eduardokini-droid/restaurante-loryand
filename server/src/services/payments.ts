@@ -3,6 +3,7 @@ import { sql } from '../db.js';
 import { badRequest, conflict, notFound } from '../errors.js';
 import { accountSummary } from './accounts.js';
 import { issueDocument } from './documents.js';
+import { setPhysicalState } from './tables.js';
 
 export const paymentInput = z.object({
   idempotencyKey: z.string().min(8).max(100),
@@ -71,7 +72,7 @@ export async function registerPayment(
       status = 'paid';
       await tx`update accounts set status = 'paid', closed_at = now() where id = ${accountId}`;
       // Pagada no es libre: la mesa queda "Pagada · aún ocupada" hasta que el personal la libere.
-      if (acc.table_id) await tx`update tables set physical_state = 'paid_occupied' where id = ${acc.table_id}`;
+      if (acc.table_id) await setPhysicalState(tx, acc.table_id, 'paid_occupied');
       await tx`update service_requests set status = 'attended', attended_at = now()
                where table_id = ${acc.table_id} and kind = 'pay' and status = 'open'`;
       const doc = await issueDocument(tx, establishmentId, accountId, 'simplified');

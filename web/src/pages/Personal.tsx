@@ -5,6 +5,7 @@ import { minutesSince, time } from '../lib/format';
 import { useLive, useOnline } from '../lib/realtime';
 import { discardQueued, flushQueue, onQueueChange, readQueue, type QueuedOrder } from '../lib/queue';
 import { ServiceScreen } from '../components/ServiceScreen';
+import { Waitlist } from '../components/Waitlist';
 import { ErrorText, useAction, useToast } from '../components/ui';
 
 const LAST_SLUG = 'loryand.lastSlug';
@@ -54,6 +55,7 @@ function Pda({ name, establishment, onShift, shiftStart, refresh, logout }: { na
   const online = useOnline();
   const [queue, setQueue] = useState<QueuedOrder[]>(readQueue);
   const [requests, setRequests] = useState<any[]>([]);
+  const [tab, setTab] = useState<'sala' | 'espera'>('sala');
   const { busy, error, run } = useAction();
   const toast = useToast();
   useEffect(() => onQueueChange(() => setQueue(readQueue())), []);
@@ -99,7 +101,11 @@ function Pda({ name, establishment, onShift, shiftStart, refresh, logout }: { na
                 <p className="small muted" style={{ margin: 0 }}>Con mesas compartidas, otros camareros ven el mismo aviso: avisa de que te encargas tú.</p>
               </div>
             )}
-            <ServiceScreen mode="pda" />
+            <div className="chips">
+              <button className={`chip ${tab === 'sala' ? 'on' : ''}`} onClick={() => setTab('sala')}>Sala</button>
+              <button className={`chip ${tab === 'espera' ? 'on' : ''}`} onClick={() => setTab('espera')}>Lista de espera</button>
+            </div>
+            {tab === 'sala' ? <ServiceScreen mode="pda" /> : <Waitlist />}
           </>
         )}
       </div>

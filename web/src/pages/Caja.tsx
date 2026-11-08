@@ -13,10 +13,12 @@ export default function Caja() {
   const [docs, setDocs] = useState<any[]>([]);
   const [docType, setDocType] = useState('');
   const [doc, setDoc] = useState<string | null>(null);
+  const [staff, setStaff] = useState<any[]>([]);
   const { error, run } = useAction();
   const load = useCallback((f = from, t = to) => run(async () => {
     setRep(await api(`/api/reports/cash?from=${f}&to=${t}`));
     setDocs(await api(`/api/reports/documents?from=${f}&to=${t}${docType ? `&type=${docType}` : ''}`));
+    setStaff(await api(`/api/reports/waiters?from=${f}&to=${t}`));
   }), [from, to, docType, run]);
   useEffect(() => { load(); }, [docType]); // eslint-disable-line react-hooks/exhaustive-deps
   const preset = (days: number | 'month' | 'week') => {
@@ -61,6 +63,24 @@ export default function Caja() {
         </div>
       )}
       <div className="card" style={{ overflowX: 'auto' }}>
+        <h3>Control de camareros</h3>
+        <table className="list">
+          <thead><tr><th>Camarero</th><th>Fichajes</th><th>Horas</th><th className="right">Comandas tomadas</th><th className="right">Cobros realizados</th></tr></thead>
+          <tbody>{staff.map((w) => (
+            <tr key={w.id}>
+              <td><strong>{w.name}</strong><div className="small muted">{w.username}</div></td>
+              <td className="small">{w.shifts.length === 0 ? <span className="muted">Sin fichajes</span> : w.shifts.map((s: any, i: number) => (
+                <div key={i}>{dateTime(s.start)} → {s.end ? new Date(s.end).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : <span className="badge">en turno</span>}</div>
+              ))}</td>
+              <td>{Math.floor(w.worked_min / 60)} h {w.worked_min % 60} min</td>
+              <td className="right">{w.orders} · {money(w.ordered_cents)}</td>
+              <td className="right">{w.payments} · {money(w.collected_cents)}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+        <p className="small muted">Quien toma la comanda no tiene por qué ser quien cobra: comandas y cobros se cuentan por separado.</p>
+      </div>
+      <div className="card" style={{ overflowX: 'auto' }}>
         <div className="spread"><h3 style={{ margin: 0 }}>Registro documental</h3>
           <select style={{ maxWidth: 220 }} value={docType} onChange={(e) => setDocType(e.target.value)}>
             <option value="">Todos los tipos</option>{Object.entries(DOC_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -70,7 +90,7 @@ export default function Caja() {
           <thead><tr><th>Número</th><th>Tipo</th><th>Fecha</th><th>Lugar</th><th>Camarero</th><th className="right">Total</th></tr></thead>
           <tbody>{docs.map((d) => (
             <tr key={d.id} onClick={() => setDoc(d.id)} style={{ cursor: 'pointer' }}>
-              <td>{d.series}-{String(d.number).padStart(5, '0')}</td><td>{DOC_LABEL[d.type]}</td><td>{dateTime(d.created_at)}</td>
+              <td>{d.series}-{String(d.number).padStart(5, '0')}</td><td>{DOC_LABEL[d.type]}{d.status === 'replaced' && <div className="badge grey">Sustituido</div>}</td><td>{dateTime(d.created_at)}</td>
               <td>{d.place}</td><td>{d.waiter ?? '—'}</td><td className="right">{money(d.total_cents)}</td>
             </tr>
           ))}</tbody>

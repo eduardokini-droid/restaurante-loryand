@@ -5,7 +5,7 @@ import { useLive } from '../lib/realtime';
 import { DocumentPrint } from './DocumentPrint';
 import { ErrorText, Modal, useAction, useToast } from './ui';
 
-interface Item { id: string; orderNumber: number; name: string; option: string | null; unitCents: number; qty: number; destination: string; course: number; status: string }
+interface Item { id: string; orderNumber: number; name: string; option: string | null; unitCents: number; qty: number; destination: string; course: number; status: string; parentItemId: string | null }
 export interface Account {
   id: string; tableId: string | null; tableLabel: string | null; barName: string | null; waiterName: string | null; status: string;
   items: Item[]; payments: { id: string; method: string; amountCents: number; createdAt: string }[];
@@ -26,7 +26,7 @@ export function AccountView({ accountId, onAddMore, onClosed }: { accountId: str
   useLive(load, ['orders', 'payments']);
 
   if (!acc) return <p className="muted">Cargando cuenta…</p>;
-  const live = acc.items.filter((i) => i.status !== 'cancelled');
+  const live = acc.items.filter((i) => i.status !== 'cancelled' && i.destination !== 'none');
   const ready = live.filter((i) => i.status === 'ready' || i.status === 'received');
   const notDelivered = live.filter((i) => i.status !== 'delivered' && i.status !== 'held');
 
@@ -62,11 +62,13 @@ export function AccountView({ accountId, onAddMore, onClosed }: { accountId: str
         <tbody>
           {acc.items.map((i) => (
             <tr key={i.id} style={i.status === 'cancelled' ? { opacity: .5, textDecoration: 'line-through' } : undefined}>
-              <td>{i.qty} × {i.name}{i.option && <div className="small muted">{i.option}</div>}<div className="small muted">Pedido {i.orderNumber} · {i.course}.º pase</div></td>
-              <td><span className={`badge ${statusBadge(i.status)}`}>{STATUS_LABEL[i.status]}</span></td>
-              <td className="right">{money(i.unitCents * i.qty)}</td>
+              {i.parentItemId
+                ? <td style={{ paddingLeft: '1.5rem' }}>↳ {i.name}<div className="small muted">{i.course}.º pase</div></td>
+                : <td>{i.qty} × {i.name}{i.option && <div className="small muted">{i.option}</div>}<div className="small muted">Pedido {i.orderNumber}{i.destination !== 'none' && ` · ${i.course}.º pase`}</div></td>}
+              <td>{i.destination === 'none' && i.status !== 'cancelled' ? <span className="badge terra">Menú</span> : <span className={`badge ${statusBadge(i.status)}`}>{STATUS_LABEL[i.status]}</span>}</td>
+              <td className="right">{i.parentItemId ? '' : money(i.unitCents * i.qty)}</td>
               <td className="right">
-                {['ready', 'received', 'new', 'preparing'].includes(i.status) && acc.status === 'open' && (
+                {['ready', 'received', 'new', 'preparing'].includes(i.status) && i.destination !== 'none' && acc.status === 'open' && (
                   <button className="btn small ghost" title="Marcar entregado" disabled={busy} onClick={() => setStatus([i.id], 'delivered')}>✓</button>
                 )}
                 {['held', 'new'].includes(i.status) && acc.status === 'open' && (
