@@ -190,7 +190,7 @@ export default async function serviceRoutes(app: FastifyInstance) {
     const r = await registerPayment(est, aid, parse(paymentInput, req.body), who(a));
     if (!r.duplicate) {
       notify(est, ['payments', 'tables', 'requests'], await tableTokenOfAccount(aid));
-      if (r.documentId) await autoPrintTicket(est, r.documentId).catch((err) => req.log.error({ err }, 'Error al preparar el ticket impreso'));
+      for (const d of r.documentIds ?? (r.documentId ? [r.documentId] : [])) await autoPrintTicket(est, d).catch((err) => req.log.error({ err }, 'Error al preparar el ticket impreso'));
       if ((req.body as { method?: string }).method === 'cash') await autoOpenDrawer(est).catch((err) => req.log.error({ err }, 'Error al abrir el cajón'));
     }
     return r;
@@ -207,6 +207,41 @@ export default async function serviceRoutes(app: FastifyInstance) {
     await printFire(est, aid, course).catch((err) => req.log.error({ err }, 'Error al imprimir la marcha'));
     notify(est, ['orders', 'tables']);
     return { course };
+  });
+
+  /**
+   * Cambiar de mesa: la cuenta entera (comandas, pases, cobros parciales) pasa a otra mesa libre.
+   * También sirve para sentar en una mesa a un cliente que estaba en la barra.
+   */
+  app.post('/api/service/accounts/:id/move', async (req) => {
+    const a = requireService(req);
+    const est = establishmentOf(req);
+    const { id: aid } = parse(id, req.params);
+    const { tableId } = parse(z.object({ tableId: z.string().uuid() }), req.body);
+    await checkTableAccess(a, est, tableId);
+    const r = await sql.begin(async (tx) => {
+      const [acc] = await tx`select id, status, table_id, bar_name from accounts where id = ${aid} and establishment_id = ${est} for update`;
+      if (!acc) throw notFound('Cuenta');
+      if (acc.status !== 'open') throw conflict('account_closed', 'Solo se puede cambiar de mesa una cuenta abierta');
+      if (acc.table_id === tableId) throw conflict('same_table', 'La cuenta ya está en esa mesa');
+      const [t] = await tx`select id, label, active from tables where id = ${tableId} and establishment_id = ${est} for update`;
+      if (!t || !t.active) throw notFound('Mesa');
+      const [busy] = await tx`select id from accounts where table_id = ${tableId} and status = 'open'
+                              and exists (select 1 from orders o where o.account_id = accounts.id)`;
+      if (busy) throw conflict('table_busy', `La mesa ${t.label} ya tiene una cuenta abierta. Si quieres juntarlas, usa «Unir cuentas».`);
+      // Una cuenta vacía en la mesa de destino (sin comandas) se descarta.
+      await tx`update accounts set status = 'cancelled', closed_at = now() where table_id = ${tableId} and status = 'open'`;
+      await tx`update accounts set table_id = ${tableId}, bar_name = null where id = ${aid}`;
+      await setPhysicalState(tx, tableId, 'occupied');
+      if (acc.table_id) {
+        const [src] = await tx`select physical_state from tables where id = ${acc.table_id}`;
+        if (src && src.physical_state !== 'free') await setPhysicalState(tx, acc.table_id, 'dirty');
+      }
+      await audit(tx, est, actorLabel(a), 'account.move', { accountId: aid, from: acc.table_id ?? `barra:${acc.bar_name}`, to: tableId });
+      return { label: t.label };
+    });
+    notify(est, ['orders', 'tables']);
+    return { ok: true, table: r.label, account: await accountSummary(sql, aid, est) };
   });
 
   app.post('/api/service/accounts/merge', async (req) => {

@@ -40,7 +40,7 @@ export function ServiceScreen({ mode }: { mode: 'tpv' | 'pda' }) {
           </>
         ) : (
           // Se mantiene la cuenta mostrada aunque se cobre, para poder imprimir el ticket.
-          <AccountView accountId={view.accountId} onAddMore={() => setView({ ...view, accountId: t.account_id, ordering: true })} onClosed={reload} />
+          <AccountView accountId={view.accountId} onAddMore={() => setView({ ...view, accountId: t.account_id, ordering: true })} onClosed={reload} onMoved={() => { reload(); setView({ kind: 'floor' }); }} />
         )}
         <TableControls table={t} onChanged={reload} />
       </div>
@@ -63,7 +63,7 @@ export function ServiceScreen({ mode }: { mode: 'tpv' | 'pda' }) {
             />
           </>
         ) : (
-          <AccountView accountId={view.accountId} onAddMore={() => setView({ ...view, ordering: true })} onClosed={reload} />
+          <AccountView accountId={view.accountId} onAddMore={() => setView({ ...view, ordering: true })} onClosed={reload} onMoved={() => { reload(); setView({ kind: 'floor' }); }} />
         )}
       </div>
     );

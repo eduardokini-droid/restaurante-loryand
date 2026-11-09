@@ -31,7 +31,7 @@ export default function Sala() {
       <FloorGrid tables={floor.tables} onPick={setOpen} />
       {current && (
         <Modal title={`Mesa ${current.label}`} onClose={() => setOpen(null)}>
-          {current.account_id ? <AccountView accountId={current.account_id} onClosed={reload} /> : <p className="muted">Sin cuenta abierta. Usa el TPV o la PDA para tomar la comanda.</p>}
+          {current.account_id ? <AccountView accountId={current.account_id} onClosed={reload} onMoved={() => { reload(); setOpen(null); }} /> : <p className="muted">Sin cuenta abierta. Usa el TPV o la PDA para tomar la comanda.</p>}
           <div className="mt"><TableControls table={current} onChanged={reload} /></div>
         </Modal>
       )}

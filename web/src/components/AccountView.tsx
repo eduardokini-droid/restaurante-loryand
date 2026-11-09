@@ -8,7 +8,7 @@ import { OnlinePaymentModal } from './OnlinePayment';
 import { useSession } from '../lib/session';
 import { ErrorText, Modal, useAction, useToast } from './ui';
 
-interface Item { id: string; orderNumber: number; name: string; option: string | null; unitCents: number; qty: number; destination: string; course: number; status: string; parentItemId: string | null }
+interface Item { id: string; orderNumber: number; name: string; option: string | null; unitCents: number; qty: number; destination: string; course: number; status: string; parentItemId: string | null; paidQty: number }
 export interface Account {
   id: string; tableId: string | null; tableLabel: string | null; barName: string | null; waiterName: string | null; status: string;
   items: Item[]; payments: { id: string; method: string; amountCents: number; createdAt: string }[];
@@ -19,10 +19,11 @@ export interface Account {
 
 const statusBadge = (s: string) => ({ ready: 'terra', received: 'terra', held: 'grey', cancelled: 'danger', delivered: '' } as Record<string, string>)[s] ?? 'warn';
 
-export function AccountView({ accountId, onAddMore, onClosed }: { accountId: string; onAddMore?: () => void; onClosed?: () => void }) {
+export function AccountView({ accountId, onAddMore, onClosed, onMoved }: { accountId: string; onAddMore?: () => void; onClosed?: () => void; onMoved?: () => void }) {
   const [acc, setAcc] = useState<Account | null>(null);
   const [paying, setPaying] = useState(false);
   const [online, setOnline] = useState(false);
+  const [moving, setMoving] = useState(false);
   const { me } = useSession();
   const [doc, setDoc] = useState<string | null>(null);
   const { busy, error, run } = useAction();
@@ -71,7 +72,7 @@ export function AccountView({ accountId, onAddMore, onClosed }: { accountId: str
             <tr key={i.id} style={i.status === 'cancelled' ? { opacity: .5, textDecoration: 'line-through' } : undefined}>
               {i.parentItemId
                 ? <td style={{ paddingLeft: '1.5rem' }}>↳ {i.name}<div className="small muted">{i.course}.º pase</div></td>
-                : <td>{i.qty} × {i.name}{i.option && <div className="small muted">{i.option}</div>}<div className="small muted">Pedido {i.orderNumber}{i.destination !== 'none' && ` · ${i.course}.º pase`}</div></td>}
+                : <td>{i.qty} × {i.name}{i.paidQty > 0 && <span className="badge" style={{ marginLeft: '.3rem' }}>{i.paidQty === i.qty ? 'pagado' : `${i.paidQty} pagado`}</span>}{i.option && <div className="small muted">{i.option}</div>}<div className="small muted">Pedido {i.orderNumber}{i.destination !== 'none' && ` · ${i.course}.º pase`}</div></td>}
               <td>{i.destination === 'none' && i.status !== 'cancelled' ? <span className="badge terra">Menú</span> : <span className={`badge ${statusBadge(i.status)}`}>{STATUS_LABEL[i.status]}</span>}</td>
               <td className="right">{i.parentItemId ? '' : money(i.unitCents * i.qty)}</td>
               <td className="right">
@@ -107,6 +108,7 @@ export function AccountView({ accountId, onAddMore, onClosed }: { accountId: str
           {onAddMore && <button className="btn" onClick={onAddMore}>+ Añadir consumición</button>}
           {acc.heldCourses.length > 0 && <button className="btn terra" disabled={busy} onClick={fire}>Marchar {acc.heldCourses[0]}.º pase</button>}
           {notDelivered.length > 0 && <button className="btn" disabled={busy} onClick={() => { if (confirm('¿Se han servido realmente todos los productos?')) setStatus(notDelivered.map((i) => i.id), 'delivered'); }}>Todo entregado</button>}
+          <button className="btn" onClick={() => setMoving(true)}>Cambiar de mesa</button>
           <button className="btn" disabled={busy || !live.length} onClick={proforma}>Imprimir cuenta</button>
           {me?.onlinePayment && <button className="btn" disabled={!acc.pendingCents} onClick={() => setOnline(true)}>Cobrar con QR · Tarjeta / Bizum</button>}
           <button className="btn primary" disabled={!acc.pendingCents} onClick={() => setPaying(true)}>Cobrar</button>
@@ -120,7 +122,31 @@ export function AccountView({ accountId, onAddMore, onClosed }: { accountId: str
       }} />}
       {online && <OnlinePaymentModal accountId={acc.id} onClose={() => { setOnline(false); load(); }} onPaid={() => { load(); onClosed?.(); }} />}
       {doc && <DocumentPrint id={doc} onClose={() => setDoc(null)} />}
+      {moving && <MoveTable acc={acc} onClose={() => setMoving(false)} onDone={(label) => { setMoving(false); toast(`Cuenta pasada a la mesa ${label}`); load(); onMoved?.(); }} />}
     </div>
+  );
+}
+
+/** Cambiar de mesa: la cuenta entera pasa a una mesa libre; la anterior queda pendiente de limpiar. */
+function MoveTable({ acc, onClose, onDone }: { acc: Account; onClose: () => void; onDone: (label: string) => void }) {
+  const [tables, setTables] = useState<{ id: string; label: string; seats: number; zone: string; account_id: string | null; physical_state: string }[]>([]);
+  const { busy, error, run } = useAction();
+  useEffect(() => { api('/api/service/floor').then((f) => setTables(f.tables)).catch(() => {}); }, []);
+  const free = tables.filter((t) => !t.account_id && t.id !== acc.tableId);
+  return (
+    <Modal title={`Cambiar ${acc.tableLabel ? `la mesa ${acc.tableLabel}` : `a ${acc.barName}`} de mesa`} onClose={onClose}>
+      <p className="small muted">Pasa la cuenta entera (comandas, pases pendientes y cobros) a la mesa elegida. Para juntar dos mesas con cuenta, usa «Unir cuentas».</p>
+      <div className="grid tiles">
+        {free.map((t) => (
+          <button key={t.id} className={`table-tile ${t.physical_state}`} disabled={busy} onClick={() => run(async () => { const r = await api(`/api/service/accounts/${acc.id}/move`, { body: { tableId: t.id } }); onDone(r.table); })}>
+            <span className="label">{t.label}</span><span className="small">{t.seats} pl.</span>
+            {t.physical_state !== 'free' && <span className="small muted">{t.physical_state === 'dirty' ? 'pendiente de limpiar' : 'ocupada'}</span>}
+          </button>
+        ))}
+      </div>
+      {free.length === 0 && <p className="muted">No hay mesas sin cuenta abierta.</p>}
+      <ErrorText error={error} />
+    </Modal>
   );
 }
 
@@ -133,19 +159,27 @@ function TicketButton({ accountId, onOpen }: { accountId: string; onOpen: (id: s
 
 function PayModal({ acc, onClose, onDone }: { acc: Account; onClose: () => void; onDone: (r: any) => void }) {
   const [method, setMethod] = useState<'cash' | 'card' | 'bizum'>('cash');
+  const [mode, setMode] = useState<'amount' | 'items'>('amount');
+  const [pick, setPick] = useState<Record<string, number>>({});
+  const payable = acc.items.filter((i) => i.status !== 'cancelled' && !i.parentItemId && i.qty - i.paidQty > 0);
   const [amount, setAmount] = useState((acc.pendingCents / 100).toFixed(2));
   const [tendered, setTendered] = useState('');
   // Una clave por intento de cobro: una doble pulsación o un reintento no cobran dos veces.
   const [key] = useState(newRequestId);
   const { busy, error, run } = useAction();
   const toast = useToast();
-  const amountCents = toCents(amount || '0');
+  // Mismo cálculo que el servidor: descuento repartido en proporción; si se eligen todos los que quedan, lo pendiente.
+  const pickedGross = payable.reduce((t, i) => t + i.unitCents * (pick[i.id] ?? 0), 0);
+  const remainingGross = payable.reduce((t, i) => t + i.unitCents * (i.qty - i.paidQty), 0);
+  const itemsAmount = pickedGross === 0 ? 0 : pickedGross === remainingGross ? acc.pendingCents : Math.round((pickedGross * acc.totalCents) / (acc.itemsTotalCents || 1));
+  const amountCents = mode === 'items' ? itemsAmount : toCents(amount || '0');
   const tenderedCents = tendered ? toCents(tendered) : null;
   const change = method === 'cash' && tenderedCents != null ? tenderedCents - amountCents : null;
 
   const pay = () => run(async () => {
-    const r = await api(`/api/service/accounts/${acc.id}/payments`, { body: { idempotencyKey: key, method, amountCents, tenderedCents: method === 'cash' ? tenderedCents : null } });
-    toast(r.duplicate ? 'Este cobro ya estaba registrado; no se ha cobrado dos veces.' : r.accountStatus === 'paid' ? 'Cuenta cobrada' : `Cobro parcial registrado. Quedan ${money(r.pendingCents)}`);
+    const items = mode === 'items' ? Object.entries(pick).filter(([, q]) => q > 0).map(([itemId, qty]) => ({ itemId, qty })) : undefined;
+    const r = await api(`/api/service/accounts/${acc.id}/payments`, { body: { idempotencyKey: key, method, amountCents, tenderedCents: method === 'cash' ? tenderedCents : null, items } });
+    toast(r.duplicate ? 'Este cobro ya estaba registrado; no se ha cobrado dos veces.' : r.accountStatus === 'paid' ? 'Cuenta cobrada' : `Cobro registrado${items ? ' con su ticket' : ''}. Quedan ${money(r.pendingCents)}`);
     onDone(r);
   });
 
@@ -155,7 +189,33 @@ function PayModal({ acc, onClose, onDone }: { acc: Account; onClose: () => void;
       <div className="row" style={{ marginBottom: '1rem' }}>
         {(['cash', 'card', 'bizum'] as const).map((m) => <button key={m} className={`chip ${method === m ? 'on' : ''}`} onClick={() => setMethod(m)}>{METHOD_LABEL[m]}</button>)}
       </div>
-      <label>Importe a cobrar (puedes dividir la cuenta)<input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
+      <div className="row" style={{ marginBottom: '.75rem' }}>
+        <button className={`chip ${mode === 'amount' ? 'on' : ''}`} onClick={() => setMode('amount')}>Por importe</button>
+        <button className={`chip ${mode === 'items' ? 'on' : ''}`} onClick={() => setMode('items')}>Por productos (cada uno lo suyo)</button>
+      </div>
+      {mode === 'amount' ? (
+        <label>Importe a cobrar (puedes dividir la cuenta)<input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
+      ) : (
+        <div className="card" style={{ marginBottom: '.75rem' }}>
+          <p className="small muted" style={{ marginTop: 0 }}>Marca lo que paga esta persona. Tendrá su propio ticket con solo esos productos.</p>
+          {payable.map((i) => {
+            const left = i.qty - i.paidQty;
+            const n = pick[i.id] ?? 0;
+            return (
+              <div key={i.id} className="ticket-line">
+                <span>{i.name}{i.option && <span className="muted"> · {i.option}</span>}<div className="small muted">{money(i.unitCents)} · quedan {left}{i.paidQty ? ` (pagados ${i.paidQty})` : ''}</div></span>
+                <span className="qty">
+                  <button onClick={() => setPick({ ...pick, [i.id]: Math.max(0, n - 1) })} aria-label="Menos">−</button>
+                  <strong>{n}</strong>
+                  <button onClick={() => setPick({ ...pick, [i.id]: Math.min(left, n + 1) })} aria-label="Más">+</button>
+                </span>
+              </div>
+            );
+          })}
+          <div className="spread mt"><strong>Paga esta persona</strong><strong>{money(itemsAmount)}</strong></div>
+          {acc.discountCents > 0 && <p className="small muted" style={{ margin: 0 }}>Incluye su parte proporcional del descuento.</p>}
+        </div>
+      )}
       {method === 'cash' && (
         <>
           <label>Efectivo entregado<input inputMode="decimal" value={tendered} onChange={(e) => setTendered(e.target.value)} placeholder="Opcional" /></label>

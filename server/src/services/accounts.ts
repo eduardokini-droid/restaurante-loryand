@@ -18,6 +18,7 @@ export interface AccountSummary {
     id: string; orderId: string; orderNumber: number; name: string; option: string | null;
     unitCents: number; vatRate: number; qty: number; destination: 'kitchen' | 'bar' | 'none'; course: number; status: string;
     parentItemId: string | null;
+    paidQty: number;
     createdAt: string;
   }>;
   payments: Array<{ id: string; method: string; amountCents: number; createdAt: string }>;
@@ -41,7 +42,8 @@ export async function accountSummary(q: Q, accountId: string, establishmentId?: 
     where a.id = ${accountId}`;
   if (!a || (establishmentId && a.establishment_id !== establishmentId)) throw notFound('Cuenta');
   const items = await q`
-    select i.*, o.number as order_number, o.created_at as order_created_at
+    select i.*, o.number as order_number, o.created_at as order_created_at,
+           (select coalesce(sum(pi.qty), 0)::int from payment_items pi where pi.order_item_id = i.id) as paid_qty
     from order_items i join orders o on o.id = i.order_id
     where o.account_id = ${accountId}
     order by o.number, coalesce(i.parent_item_id, i.id), i.parent_item_id nulls first, i.course, i.name`;
@@ -68,7 +70,7 @@ export async function accountSummary(q: Q, accountId: string, establishmentId?: 
     items: items.map((i) => ({
       id: i.id, orderId: i.order_id, orderNumber: i.order_number, name: i.name, option: i.option,
       unitCents: i.unit_cents, vatRate: Number(i.vat_rate), qty: i.qty, destination: i.destination,
-      course: i.course, status: i.status, createdAt: i.order_created_at, parentItemId: i.parent_item_id,
+      course: i.course, status: i.status, createdAt: i.order_created_at, parentItemId: i.parent_item_id, paidQty: i.paid_qty,
     })),
     payments: payments.map((p) => ({ id: p.id, method: p.method, amountCents: p.amount_cents, createdAt: p.created_at })),
     discounts: discounts.map((d) => ({ id: d.id, label: d.label, amountCents: d.amount_cents, couponId: d.coupon_id })),
