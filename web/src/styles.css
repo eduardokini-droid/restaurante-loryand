@@ -156,3 +156,11 @@ table.list th { font-size: .78rem; text-transform: uppercase; letter-spacing: .0
 .doc .l { display: flex; justify-content: space-between; gap: 6px; }
 .hero .chip { background: rgba(255,255,255,.14); border-color: rgba(255,255,255,.35); color: #fff; }
 .hero .chip.on { background: #fff; color: var(--green-dark); border-color: #fff; }
+
+/* Selector de idioma de la carta del cliente: siempre visible, con bandera y código. */
+.lang-bar { display: flex; gap: .3rem; overflow-x: auto; margin: -.25rem 0 .6rem; padding-bottom: .15rem; scrollbar-width: none; }
+.lang-bar::-webkit-scrollbar { display: none; }
+.lang-btn { flex: none; display: inline-flex; align-items: center; gap: .25rem; padding: .3rem .55rem; border-radius: 99px; font: inherit; font-size: .8rem; font-weight: 600;
+  background: rgba(255,255,255,.12); color: #fff; border: 1px solid rgba(255,255,255,.35); cursor: pointer; min-height: 32px; }
+.lang-btn.on { background: #fff; color: var(--green-dark); border-color: #fff; }
+.lang-btn span { font-size: 1rem; line-height: 1; }

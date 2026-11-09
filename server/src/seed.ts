@@ -2,9 +2,11 @@
 import { sql } from './db.js';
 import { migrate } from './migrate.js';
 import { seedDemo } from './demo.js';
+import { applyDemoTranslations } from './demoTranslations.js';
 
 await migrate();
 const created = await seedDemo({ createGestor: true, adminPassword: 'admin1234' });
+await applyDemoTranslations();
 console.log(created ? `Datos de demostración creados.
   Gestor general:  gestor / gestor1234
   Administrador:   admin / admin1234

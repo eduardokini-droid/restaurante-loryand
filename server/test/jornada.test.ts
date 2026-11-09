@@ -17,6 +17,7 @@ async function login(url: string, payload: object) {
   expect(r.statusCode, r.body).toBe(200);
   return String(r.headers['set-cookie']).split(';')[0];
 }
+const yesterday = () => new Date(Date.now() - 86_400_000).toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' });
 const today = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' });
 const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' });
 
@@ -51,7 +52,8 @@ describe('registro de jornada', () => {
     await sql`update shifts set started_at = now() - interval '4 hours'`;
     await call(pepe, 'POST', '/api/service/shift/break/end');
     await call(pepe, 'POST', '/api/service/shift/end');
-    const mine = (await call(pepe, 'GET', `/api/service/my-shifts?from=${today()}&to=${today()}`)).json();
+    // El turno empezó hace 4 horas: entre las 00:00 y las 04:00 eso es «ayer».
+    const mine = (await call(pepe, 'GET', `/api/service/my-shifts?from=${yesterday()}&to=${today()}`)).json();
     expect(mine.shifts[0]).toMatchObject({ break_min: 30, worked_min: 210 });
     const [t] = await sql`insert into tables (establishment_id, label) values (${est}, '1') returning id`;
     const [p] = await sql`insert into products (establishment_id, name, price_cents) values (${est}, 'Café', 150) returning id`;

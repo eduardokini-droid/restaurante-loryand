@@ -3,6 +3,7 @@ import { api, newRequestId } from '../lib/api';
 import { money, ALLERGENS } from '../lib/format';
 import { sendOrder } from '../lib/queue';
 import { ErrorText, Modal, useAction, useToast } from './ui';
+import { t, type Lang } from '../lib/i18n';
 
 export interface MenuProduct {
   id: string; name: string; description: string; price_cents: number; destination: 'kitchen' | 'bar';
@@ -159,21 +160,24 @@ export function OrderBuilder({ target, targetLabel, extraBody, onSent }: {
 }
 
 /** Elección de un menú del día: un plato por apartado incluido. */
-export function MenuChooser({ menu, onClose, onAdd }: { menu: DailyMenu; onClose: () => void; onAdd: (choice: Record<string, string>) => void }) {
+export function MenuChooser({ menu, onClose, onAdd, lang = 'es' }: { menu: DailyMenu; onClose: () => void; onAdd: (choice: Record<string, string>) => void; lang?: Lang }) {
   const [choice, setChoice] = useState<Record<string, string>>({});
   const sections = MENU_SECTIONS.filter(([k]) => (menu.sections[k] ?? []).length > 0);
   const complete = sections.every(([k]) => choice[k]);
   return (
-    <Modal title={`${menu.name} · ${money(menu.price_cents)}`} onClose={onClose}>
+    <Modal title={`${menuName(menu.name, lang)} · ${money(menu.price_cents)}`} onClose={onClose}>
       {sections.map(([k, label]) => (
         <div key={k} style={{ marginBottom: '.75rem' }}>
-          <div className="small muted" style={{ marginBottom: '.3rem' }}>{label}</div>
+          <div className="small muted" style={{ marginBottom: '.3rem' }}>{lang === 'es' ? label : t(k as 'first', lang)}</div>
           <div className="row" style={{ gap: '.35rem' }}>
             {menu.sections[k].map((o) => <button key={o} className={`chip ${choice[k] === o ? 'on' : ''}`} onClick={() => setChoice({ ...choice, [k]: o })}>{o}</button>)}
           </div>
         </div>
       ))}
-      <button className="btn primary block" disabled={!complete} onClick={() => onAdd(choice)}>{complete ? 'Añadir menú' : 'Elige un plato de cada apartado'}</button>
+      <button className="btn primary block" disabled={!complete} onClick={() => onAdd(choice)}>{complete ? t('addMenu', lang) : t('chooseEach', lang)}</button>
     </Modal>
   );
 }
+
+/** El nombre por defecto «Menú del día» se traduce; un nombre propio del local se deja tal cual. */
+export const menuName = (name: string, lang: Lang) => (lang !== 'es' && name.trim().toLowerCase() === 'menú del día' ? t('dailyMenu', lang) : name);

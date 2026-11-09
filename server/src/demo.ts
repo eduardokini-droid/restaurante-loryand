@@ -69,12 +69,6 @@ export async function seedDemo(opts: { createGestor: boolean; adminPassword: str
     await tx`insert into recipe_lines (product_id, item_id, qty, unit) values (${await pid('Patatas bravas')}, ${patatas}, 250, 'g'), (${await pid('Patatas bravas')}, ${aceite}, 30, 'ml')`;
     const [lucia] = await tx`insert into customers (establishment_id, name, phone, points, marketing_consent) values (${est}, 'Lucía Martínez', '600000001', 120, true) returning id`;
     await tx`insert into coupons (establishment_id, customer_id, code, description, kind, value, max_uses, valid_from) values (${est}, ${lucia.id}, 'BIENVENIDA', 'Un 10 % de descuento en tu próxima visita', 'percent', 10, 1, current_date)`;
-    for (const [name, en, fr, de] of [['Croquetas caseras', 'Homemade croquettes', 'Croquettes maison', 'Hausgemachte Kroketten'], ['Patatas bravas', 'Spicy potatoes', 'Pommes de terre épicées', 'Scharfe Kartoffeln'], ['Tarta de queso', 'Cheesecake', 'Gâteau au fromage', 'Käsekuchen']] as const) {
-      await tx`update products set translations = ${tx.json({ en: { name: en, description: '' }, fr: { name: fr, description: '' }, de: { name: de, description: '' } })} where establishment_id = ${est} and name = ${name}`;
-    }
-    for (const [name, en] of [['Comida', 'Food'], ['Bebidas', 'Drinks'], ['Entrantes', 'Starters'], ['Principales', 'Main courses'], ['Postres', 'Desserts']] as const) {
-      await tx`update categories set translations = ${tx.json({ en })} where establishment_id = ${est} and name = ${name}`;
-    }
     await tx`insert into daily_menus (establishment_id, name, price_cents, sections, active) values (${est}, 'Menú del día', 1450,
       ${tx.json({ first: ['Lentejas estofadas', 'Ensalada mixta', 'Gazpacho'], second: ['Merluza a la plancha', 'Pollo asado', 'Albóndigas'], dessert: ['Flan', 'Fruta del tiempo'], drink: ['Agua', 'Vino de la casa', 'Refresco'], coffee: [] })}, true)`;
     const tables: [string, string, number][] = [

@@ -2,6 +2,7 @@ import { sql } from './db.js';
 import { hashPassword } from './auth.js';
 import { audit } from './services/audit.js';
 import { seedDemo } from './demo.js';
+import { applyDemoTranslations } from './demoTranslations.js';
 
 /**
  * Primer arranque en un servidor nuevo:
@@ -26,6 +27,8 @@ export async function bootstrap(log: (m: string) => void) {
   if (process.env.SEED_DEMO === 'true') {
     const created = await seedDemo({ createGestor: false, adminPassword: password, screenPassword: password });
     if (created) log('Local de demostración "demo" creado (usuarios admin, cocina y barra con la contraseña del gestor; camareros PIN 1111 y 2222).');
+    // La carta de demostración, traducida a todos los idiomas (también en servidores ya creados).
+    await applyDemoTranslations();
   }
 }
 

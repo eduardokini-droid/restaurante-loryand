@@ -4,13 +4,15 @@ import { api, newRequestId } from '../lib/api';
 import { ALLERGENS, STATUS_LABEL, money } from '../lib/format';
 import { useLive } from '../lib/realtime';
 import { ErrorText, Modal, useAction } from '../components/ui';
-import { MenuChooser, type DailyMenu } from '../components/OrderBuilder';
+import { MenuChooser, menuName, type DailyMenu } from '../components/OrderBuilder';
 import { LANGS, allergenName, t as tt, trCategory, trProduct, type Lang } from '../lib/i18n';
 import { LegalLinks } from './Legal';
 
 interface P { id: string; name: string; description: string; price_cents: number; options: string[]; allergens: string[]; category_id: string | null; subcategory_id: string | null; photo_url: string | null; translations?: Record<string, { name?: string; description?: string }> }
 interface Data { establishment: string; slug?: string; table: { label: string; accessOpen: boolean }; categories: { id: string; parent_id: string | null; name: string; translations?: Record<string, string> }[]; products: P[]; dailyMenu: DailyMenu | null; onlinePayment?: boolean }
 interface Line { key: string; p: P; option: string | null; qty: number; menu?: Record<string, string> }
+
+const FLAG: Record<Lang, string> = { es: '🇪🇸', en: '🇬🇧', fr: '🇫🇷', de: '🇩🇪', it: '🇮🇹', pt: '🇵🇹', ru: '🇷🇺' };
 
 /** Carta digital del cliente: se abre con el QR o NFC de la mesa. */
 export default function ClientMenu() {
@@ -91,10 +93,14 @@ export default function ClientMenu() {
   return (
     <div style={{ paddingBottom: 90 }}>
       <header className="hero" style={{ padding: '1.25rem 1rem' }}>
-        <div className="spread"><span className="small" style={{ opacity: .85 }}>{tt('table', lang)} {data.table.label}</span>
-          <select aria-label="Idioma" value={lang} onChange={(e) => setLang(e.target.value as Lang)} style={{ width: 'auto', padding: '.2rem .4rem', background: 'rgba(255,255,255,.15)', color: '#fff', border: '1px solid rgba(255,255,255,.4)' }}>
-            {LANGS.map(([k, l]) => <option key={k} value={k} style={{ color: '#000' }}>{l}</option>)}
-          </select></div>
+        <div className="lang-bar" role="group" aria-label="Idioma · Language">
+          {LANGS.map(([k, l]) => (
+            <button key={k} className={`lang-btn ${lang === k ? 'on' : ''}`} onClick={() => setLang(k)} aria-pressed={lang === k} title={l} lang={k}>
+              <span aria-hidden="true">{FLAG[k]}</span> {k.toUpperCase()}
+            </button>
+          ))}
+        </div>
+        <span className="small" style={{ opacity: .85 }}>{tt('table', lang)} {data.table.label}</span>
         <h1 style={{ margin: 0 }}>{data.establishment}</h1>
         <div className="row mt" style={{ gap: '.4rem' }}>
           <button className={`chip ${view === 'menu' ? 'on' : ''}`} onClick={() => setView('menu')}>{tt('menu', lang)}</button>
@@ -115,9 +121,9 @@ export default function ClientMenu() {
           {data.dailyMenu && (
             <button className="card" style={{ width: '100%', textAlign: 'left', borderColor: 'var(--terra)', marginBottom: '1rem', cursor: 'pointer' }}
               onClick={() => data.table.accessOpen && setMenuOpen(true)}>
-              <span className="spread"><strong style={{ color: 'var(--terra)' }}>{data.dailyMenu.name}</strong><strong>{money(data.dailyMenu.price_cents)}</strong></span>
-              <span className="small muted" style={{ display: 'block' }}>{[['first', 'Primero'], ['second', 'Segundo'], ['dessert', 'Postre'], ['drink', 'Bebida'], ['coffee', 'Café']]
-                .filter(([k]) => data.dailyMenu!.sections[k]?.length).map(([k, l]) => `${l}: ${data.dailyMenu!.sections[k].join(', ')}`).join(' · ')}</span>
+              <span className="spread"><strong style={{ color: 'var(--terra)' }}>{menuName(data.dailyMenu.name, lang)}</strong><strong>{money(data.dailyMenu.price_cents)}</strong></span>
+              <span className="small muted" style={{ display: 'block' }}>{(['first', 'second', 'dessert', 'drink', 'coffee'] as const)
+                .filter((k) => data.dailyMenu!.sections[k]?.length).map((k) => `${tt(k, lang)}: ${data.dailyMenu!.sections[k].join(', ')}`).join(' · ')}</span>
             </button>
           )}
           {sections.map((s) => (
@@ -163,7 +169,7 @@ export default function ClientMenu() {
       )}
 
       {menuOpen && data.dailyMenu && (
-        <MenuChooser menu={data.dailyMenu} onClose={() => setMenuOpen(false)} onAdd={(choice) => {
+        <MenuChooser lang={lang} menu={data.dailyMenu} onClose={() => setMenuOpen(false)} onAdd={(choice) => {
           const dm = data.dailyMenu!;
           const p: P = { id: 'menu', name: dm.name, description: '', price_cents: dm.price_cents, options: [], allergens: [], category_id: null, subcategory_id: null, photo_url: null };
           setLines((ls) => [...ls, { key: `menu|${Date.now()}|${Math.random()}`, p, option: Object.values(choice).join(' · '), qty: 1, menu: choice }]);
