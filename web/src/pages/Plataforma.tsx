@@ -7,14 +7,14 @@ import { ErrorText, useAction, useToast } from '../components/ui';
 export default function Plataforma() {
   const { logout } = useSession();
   const [list, setList] = useState<any[]>([]);
-  const [f, setF] = useState({ name: '', slug: '', adminName: '', adminUser: '', adminPass: '' });
+  const [f, setF] = useState({ name: '', slug: '', adminName: '', adminUser: '', adminPass: '', adminEmail: '' });
   const { busy, error, run } = useAction();
   const toast = useToast();
   const load = useCallback(() => { api('/api/platform/establishments').then(setList).catch(() => {}); }, []);
   useEffect(load, [load]);
   const create = () => run(async () => {
-    await api('/api/platform/establishments', { body: { name: f.name, slug: f.slug, admin: { name: f.adminName, username: f.adminUser, password: f.adminPass } } });
-    toast('Establecimiento creado'); setF({ name: '', slug: '', adminName: '', adminUser: '', adminPass: '' }); load();
+    await api('/api/platform/establishments', { body: { name: f.name, slug: f.slug, admin: { name: f.adminName, username: f.adminUser, password: f.adminPass, email: f.adminEmail.trim() || undefined } } });
+    toast('Establecimiento creado'); setF({ name: '', slug: '', adminName: '', adminUser: '', adminPass: '', adminEmail: '' }); load();
   });
   const enter = (id: string) => { setSelectedEstablishment(id); location.assign('/gestion'); };
   const toggle = (e: any) => run(async () => {
@@ -23,7 +23,7 @@ export default function Plataforma() {
   });
   return (
     <div style={{ padding: '1.5rem', maxWidth: 960, margin: '0 auto' }} className="stack">
-      <div className="spread"><h1>Gestor general · Establecimientos</h1><button className="btn" onClick={logout}>Salir</button></div>
+      <div className="spread"><h1>Gestor general · Establecimientos</h1><span className="row"><a className="btn" href="/gestion/cuenta">Mi cuenta</a><button className="btn" onClick={logout}>Salir</button></span></div>
       <div className="card" style={{ overflowX: 'auto' }}>
         <table className="list">
           <thead><tr><th>Establecimiento</th><th>Identificador</th><th>Mesas activas</th><th></th></tr></thead>
@@ -43,6 +43,7 @@ export default function Plataforma() {
           <label>Nombre del administrador<input value={f.adminName} onChange={(e) => setF({ ...f, adminName: e.target.value })} /></label>
           <label>Usuario del administrador<input value={f.adminUser} onChange={(e) => setF({ ...f, adminUser: e.target.value })} /></label>
           <label>Contraseña inicial<input type="password" value={f.adminPass} onChange={(e) => setF({ ...f, adminPass: e.target.value })} /></label>
+          <label>Correo del administrador (para recuperar la contraseña)<input type="email" value={f.adminEmail} onChange={(e) => setF({ ...f, adminEmail: e.target.value })} /></label>
         </div>
         <ErrorText error={error} />
         <button className="btn primary" disabled={busy || !f.name || !f.slug || !f.adminUser || f.adminPass.length < 8} onClick={create}>Crear establecimiento</button>

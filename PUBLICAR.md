@@ -115,3 +115,28 @@ Las copias automáticas se guardan en la base de datos del programa. Para tenerl
 Qué se guarda: `diarias/<local>/dia-DD.json.gz` (los últimos 31 días, se sobrescriben),
 `mensuales/<local>/AAAA-MM.json.gz` (una por mes, permanentes) y las manuales y preventivas.
 Funciona igual con cualquier almacenamiento compatible con S3 (Cloudflare R2, Backblaze…).
+
+## 11. Seguridad del panel: doble verificación y recuperar la contraseña
+
+**Doble verificación del gestor (obligatoria).** La primera vez que entres como gestor después de esta actualización, el panel te pedirá activarla antes de seguir:
+1. Instala en el móvil una aplicación de autenticación (Google Authenticator, Microsoft Authenticator o Authy).
+2. Escribe tu contraseña, escanea el código QR y escribe el código de 6 cifras.
+3. **Guarda los 10 códigos de emergencia** (imprímelos o guárdalos fuera del móvil). Sirven para entrar si pierdes el móvil.
+
+Los administradores y el resto de usuarios pueden activarla si quieren en **Mi cuenta**.
+
+**Recuperar la contraseña.**
+- Cualquier usuario: el administrador del local le genera un **enlace de un solo uso** en *Usuarios y permisos → Enlace para nueva contraseña* y se lo manda (por ejemplo, por WhatsApp). El enlace vale 24 horas.
+- El administrador del local: el enlace se lo genera el gestor desde su establecimiento (*Entrar → Usuarios y permisos*).
+- Si alguien pierde el móvil de la doble verificación: *Usuarios y permisos → Quitar doble verificación*.
+
+**Enlace por correo (opcional).** Para que «¿Has olvidado la contraseña?» envíe el enlace por correo, crea una cuenta en resend.com, verifica tu dominio y añade en Render:
+
+| Variable | Valor |
+|---|---|
+| `MAIL_RESEND_API_KEY` | la clave de Resend (empieza por `re_`) |
+| `MAIL_FROM` | `Loryand <no-responder@tudominio.es>` |
+
+Cada usuario guarda su correo en **Mi cuenta**.
+
+**Último recurso del gestor** (contraseña olvidada **y** móvil perdido, sin códigos de emergencia): en Render añade `GESTOR_RECOVERY` con la fecha de hoy (`AAAA-MM-DD`) y reinicia el servicio. La contraseña del gestor pasa a ser la de `BOOTSTRAP_ADMIN_PASSWORD` y se quita la doble verificación (se pedirá activarla otra vez al entrar). Solo actúa ese día y una vez. **Después, borra la variable.**

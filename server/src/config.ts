@@ -5,6 +5,8 @@ export const config = {
   // En Render, RENDER_EXTERNAL_URL se define automáticamente con la dirección pública del servicio.
   publicUrl: (process.env.PUBLIC_URL ?? process.env.RENDER_EXTERNAL_URL ?? 'http://localhost:3000').replace(/\/$/, ''),
   production: process.env.NODE_ENV === 'production',
+  // Doble verificación obligatoria para el gestor general: siempre en producción, salvo REQUIRE_GESTOR_2FA=false.
+  requireGestorMfa: process.env.REQUIRE_GESTOR_2FA ? process.env.REQUIRE_GESTOR_2FA === 'true' : process.env.NODE_ENV === 'production',
 };
 if (config.production && config.sessionSecret === 'dev-secret-cambiar') {
   throw new Error('SESSION_SECRET debe configurarse en producción');

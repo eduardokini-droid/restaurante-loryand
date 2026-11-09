@@ -28,7 +28,7 @@ export default async function platformRoutes(app: FastifyInstance) {
     const b = parse(z.object({
       name: z.string().min(1).max(120),
       slug: z.string().min(2).max(40).regex(/^[a-z0-9-]+$/, 'solo minúsculas, números y guiones'),
-      admin: z.object({ name: z.string().min(1), username: z.string().min(3).max(40), password: z.string().min(8) }),
+      admin: z.object({ name: z.string().min(1), username: z.string().min(3).max(40), password: z.string().min(8), email: z.string().trim().toLowerCase().email('Correo no válido').max(120).optional() }),
       features: z.array(z.enum(FEATURES)).default([...FEATURES]),
     }), req.body);
     return sql.begin(async (tx) => {
@@ -37,8 +37,8 @@ export default async function platformRoutes(app: FastifyInstance) {
       const [u] = await tx`select 1 from users where lower(username) = lower(${b.admin.username})`;
       if (u) throw conflict('username_taken', 'Ese usuario ya existe');
       const [e] = await tx`insert into establishments (name, slug, features) values (${b.name}, ${b.slug}, ${b.features}) returning *`;
-      await tx`insert into users (establishment_id, username, name, password_hash, role)
-               values (${e.id}, ${b.admin.username}, ${b.admin.name}, ${await hashPassword(b.admin.password)}, 'admin')`;
+      await tx`insert into users (establishment_id, username, name, password_hash, role, email)
+               values (${e.id}, ${b.admin.username}, ${b.admin.name}, ${await hashPassword(b.admin.password)}, 'admin', ${b.admin.email ?? null})`;
       await audit(tx, e.id, actorLabel(a), 'establishment.create', { slug: b.slug });
       return e;
     });

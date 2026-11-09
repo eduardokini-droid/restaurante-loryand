@@ -124,7 +124,7 @@ export default async function adminRoutes(app: FastifyInstance) {
   // ---------- Usuarios del panel ----------
   app.get('/api/admin/users', async (req) => {
     requireModule(req, 'users');
-    return sql`select id, username, name, role, permissions, active, created_at from users
+    return sql`select id, username, name, email, role, permissions, active, totp_enabled, created_at from users
                where establishment_id = ${establishmentOf(req)} order by name`;
   });
 
@@ -135,6 +135,7 @@ export default async function adminRoutes(app: FastifyInstance) {
       name: z.string().min(1).max(80),
       username: z.string().min(3).max(40).regex(/^[a-z0-9._-]+$/i, 'solo letras, números, punto y guion'),
       password: z.string().min(8, 'mínimo 8 caracteres').max(100),
+      email: z.string().trim().toLowerCase().email('Correo no válido').max(120).optional(),
       permissions: z.array(z.enum(MODULES)).default([]),
     }), req.body);
     if (a.kind === 'user' && a.role === 'staff' && b.permissions.some((p) => !a.permissions.includes(p))) {
@@ -143,9 +144,9 @@ export default async function adminRoutes(app: FastifyInstance) {
     const [exists] = await sql`select 1 from users where lower(username) = lower(${b.username})`;
     if (exists) throw conflict('username_taken', 'Ese nombre de usuario ya existe');
     const [u] = await sql`
-      insert into users (establishment_id, username, name, password_hash, role, permissions)
-      values (${est}, ${b.username}, ${b.name}, ${await hashPassword(b.password)}, 'staff', ${b.permissions})
-      returning id, username, name, role, permissions, active`;
+      insert into users (establishment_id, username, name, password_hash, role, permissions, email)
+      values (${est}, ${b.username}, ${b.name}, ${await hashPassword(b.password)}, 'staff', ${b.permissions}, ${b.email ?? null})
+      returning id, username, name, email, role, permissions, active`;
     return u;
   });
 
@@ -158,6 +159,7 @@ export default async function adminRoutes(app: FastifyInstance) {
       password: z.string().min(8).max(100),
       active: z.boolean(),
       name: z.string().min(1).max(80),
+      email: z.string().trim().toLowerCase().email('Correo no válido').max(120).nullable(),
     }).partial(), req.body);
     const [target] = await sql`select id, role from users where id = ${uid} and establishment_id = ${est}`;
     if (!target) throw notFound('Usuario');
@@ -167,6 +169,7 @@ export default async function adminRoutes(app: FastifyInstance) {
     if (b.permissions) cols.permissions = b.permissions;
     if (b.active !== undefined) cols.active = b.active;
     if (b.name) cols.name = b.name;
+    if (b.email !== undefined) cols.email = b.email;
     if (b.password) cols.password_hash = await hashPassword(b.password);
     if (Object.keys(cols).length) await sql`update users set ${sql(cols)} where id = ${uid}`;
     // Cambios de permisos o contraseña: se cierran sus sesiones para que se apliquen al volver a entrar.

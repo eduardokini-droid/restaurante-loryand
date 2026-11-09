@@ -1,7 +1,8 @@
 import type { FastifyInstance } from 'fastify';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import { sql } from '../db.js';
+import { config } from '../config.js';
 import { COOKIE, checkPassword, createSession, destroySession, pinLookup, requireActor, setSessionCookie, can, MODULES } from '../auth.js';
 import { AppError } from '../errors.js';
 import { parse } from '../validate.js';
@@ -15,12 +16,20 @@ export default async function authRoutes(app: FastifyInstance) {
     checkLimit(req, 'login');
     const body = parse(z.object({ username: z.string().min(1), password: z.string().min(1) }), req.body);
     const [u] = await sql`
-      select u.id, u.password_hash, u.active, coalesce(e.active, true) as est_active
+      select u.id, u.password_hash, u.active, u.totp_enabled, coalesce(e.active, true) as est_active
       from users u left join establishments e on e.id = u.establishment_id
       where lower(u.username) = lower(${body.username})`;
     if (!u || !u.active || !u.est_active || !(await checkPassword(body.password, u.password_hash))) {
       recordFailure(req, 'login');
       throw fail();
+    }
+    if (u.totp_enabled) {
+      // Contraseña correcta: falta el código de la aplicación de autenticación (5 minutos, 5 intentos).
+      const challenge = randomBytes(32).toString('base64url');
+      await sql`delete from login_challenges where expires_at < now()`;
+      await sql`insert into login_challenges (token_hash, user_id, expires_at)
+                values (${createHash('sha256').update(challenge).digest('hex')}, ${u.id}, now() + interval '5 minutes')`;
+      return { ok: false, needs2fa: true, challenge };
     }
     setSessionCookie(reply, await createSession('user', u.id));
     return { ok: true };
@@ -116,6 +125,7 @@ export default async function authRoutes(app: FastifyInstance) {
       const [pay] = await sql`select 1 from integrations where establishment_id = ${a.establishmentId} and kind = 'redsys' and enabled and secret_enc is not null`;
       onlinePayment = !!pay;
     }
-    return { actor: a, establishment, shift, modules: MODULES.filter((m) => can(a, m)), onlinePayment, staffRole };
+    const mfaRequired = a.kind === 'user' && a.role === 'superadmin' && !a.mfa && config.requireGestorMfa;
+    return { actor: a, establishment, shift, modules: MODULES.filter((m) => can(a, m)), onlinePayment, staffRole, mfaRequired };
   });
 }

@@ -8,6 +8,7 @@ export interface Me {
   modules: string[];
   onlinePayment?: boolean;
   staffRole?: 'sala' | 'cocina' | 'barra' | 'otros' | null;
+  mfaRequired?: boolean;
 }
 interface Ctx { me: Me | null; loading: boolean; refresh: () => Promise<void>; logout: () => Promise<void> }
 const SessionCtx = createContext<Ctx>(null as never);

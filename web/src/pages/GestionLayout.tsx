@@ -1,4 +1,4 @@
-import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
+import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useSession } from '../lib/session';
 import { getSelectedEstablishment, setSelectedEstablishment } from '../lib/api';
 import Login from './Login';
@@ -21,6 +21,7 @@ import Integraciones from './Integraciones';
 import Jornada from './Jornada';
 import Impresoras from './Impresoras';
 import Informes from './Informes';
+import Cuenta from './Cuenta';
 import { Waitlist } from '../components/Waitlist';
 import { ServiceScreen } from '../components/ServiceScreen';
 
@@ -46,17 +47,23 @@ const NAV: { to: string; label: string; module: string }[] = [
   { to: 'integraciones', label: 'Pagos y WhatsApp', module: 'admin' },
   { to: 'impresoras', label: 'Impresoras', module: 'admin' },
   { to: 'copias', label: 'Copias de seguridad', module: 'admin' },
+  { to: 'cuenta', label: 'Mi cuenta', module: 'self' },
 ];
 
 export default function GestionLayout() {
-  const { me, loading, logout } = useSession();
+  const { me, loading, logout, refresh } = useSession();
+  const { pathname } = useLocation();
   if (loading) return <p className="muted" style={{ padding: '2rem' }}>Cargando…</p>;
   if (!me || me.actor.kind !== 'user') return <Login />;
   const isSuper = me.actor.role === 'superadmin';
   const selected = getSelectedEstablishment();
-  if (isSuper && !selected) return <Plataforma />;
+  if (me.mfaRequired) return <div style={{ padding: '1.5rem', maxWidth: 760, margin: '0 auto' }}><Cuenta forced onDone={refresh} /><button className="btn ghost mt" onClick={logout}>Salir</button></div>;
+  if (isSuper && !selected) {
+    if (pathname.startsWith('/gestion/cuenta')) return <div style={{ padding: '1.5rem', maxWidth: 760, margin: '0 auto' }}><a className="btn ghost small" href="/gestion">← Establecimientos</a><Cuenta /></div>;
+    return <Plataforma />;
+  }
   const isAdmin = isSuper || me.actor.role === 'admin';
-  const nav = NAV.filter((n) => isSuper || (n.module === 'admin' ? isAdmin : me.modules.includes(n.module)));
+  const nav = NAV.filter((n) => isSuper || (n.module === 'admin' ? isAdmin : n.module === 'self' || me.modules.includes(n.module)));
   const first = `/gestion/${nav[0]?.to ?? 'sala'}`;
   return (
     <div className="shell">
@@ -88,6 +95,7 @@ export default function GestionLayout() {
           <Route path="barra" element={<Kds destination="bar" />} />
           <Route path="caja" element={<Caja />} />
           <Route path="informes" element={<Informes />} />
+          <Route path="cuenta" element={<Cuenta />} />
           <Route path="carta" element={<Carta />} />
           <Route path="mesas" element={<Mesas />} />
           <Route path="camareros" element={<Camareros />} />
