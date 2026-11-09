@@ -206,7 +206,7 @@ export default async function reservationRoutes(app: FastifyInstance) {
   // ---------- Formulario público ----------
   app.get('/api/public/booking/:slug', async (req) => {
     const { slug } = parse(z.object({ slug: z.string().min(1).max(40) }), req.params);
-    const [e] = await sql`select id, name, address, city, phone from establishments where slug = ${slug} and active`;
+    const [e] = await sql`select id, name, address, city, phone from establishments where slug = ${slug} and active and 'reservations' = any(features)`;
     if (!e) throw notFound('Establecimiento');
     const s = await settingsOf(sql, e.id);
     if (!s.publicEnabled) throw new AppError(403, 'booking_closed', 'Este establecimiento no acepta reservas en línea');
@@ -230,7 +230,7 @@ export default async function reservationRoutes(app: FastifyInstance) {
       acceptPrivacy: z.literal(true, { error: 'Para reservar, acepta la política de privacidad' }),
       whatsappConsent: z.boolean().default(false),
     }), req.body);
-    const [e] = await sql`select id from establishments where slug = ${slug} and active`;
+    const [e] = await sql`select id from establishments where slug = ${slug} and active and 'reservations' = any(features)`;
     if (!e) throw notFound('Establecimiento');
     const s = await settingsOf(sql, e.id);
     if (!s.publicEnabled) throw new AppError(403, 'booking_closed', 'Este establecimiento no acepta reservas en línea');

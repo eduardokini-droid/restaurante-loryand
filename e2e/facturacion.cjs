@@ -34,42 +34,59 @@ const OUT = process.argv[2];
   await g.click('button:has-text("Guardar")');
   await g.waitForSelector('text=Datos de facturación guardados');
 
-  // 2. Contrato del local de demostración.
+  // 2. Contrato del local de demostración: plan Profesional (3 € por mesa), domiciliado.
   await g.click('button.chip:has-text("Clientes")');
+  const tables = (await g.locator('tr:has-text("Casa Demo") td:nth-child(3)').textContent()).match(/^\d+/)[0] * 1;
   await g.click('tr:has-text("Casa Demo") button:has-text("Contrato")');
-  await g.fill('.modal label:has-text("Plan") input', 'Plan TPV completo');
-  await g.fill('.modal label:has-text("Cuota mensual") input', '49,00');
+  await g.selectOption('.modal label:has-text("Plan") select', { label: 'Profesional' });
+  await g.waitForSelector('.modal input[value="3,00"]');
+  await g.selectOption('.modal label:has-text("Forma de pago") select', 'direct_debit');
+  await g.fill('.modal label:has-text("IBAN del cliente") input', 'ES79 2100 0813 6101 2345 6789');
+  await g.fill('.modal label:has-text("Fecha de firma") input', '2026-01-15');
   await g.fill('.modal label:has-text("Razón social") input', 'Casa Demo Hostelería S.L.');
   await g.fill('.modal label:has-text("NIF / CIF") input', 'B12345678');
   await g.fill('.modal label:has-text("Dirección fiscal") input', 'C/ Mayor 12, 45001 Toledo');
+  await g.screenshot({ path: `${OUT}/fact-0-contrato.png`, fullPage: true });
   await g.click('.modal button:has-text("Guardar contrato")');
-  await g.waitForSelector('tr:has-text("Casa Demo"):has-text("Plan TPV completo")');
-  await g.waitForSelector('text=59,29');  // 49 € + 21 % en la tarjeta de cuotas al mes
+  await g.waitForSelector('tr:has-text("Casa Demo"):has-text("Profesional")');
+  const expected = (tables * 300 * 1.21 / 100).toFixed(2).replace('.', ',');
 
-  // 3. Cuotas del mes y factura.
+  // 3. Cuotas del mes, factura y remesa SEPA.
   await g.click('button.chip:has-text("Facturas")');
   await g.click('button:has-text("Emitir cuotas de")');
   await g.waitForSelector('text=1 factura emitida');
-  await g.waitForSelector('tr:has-text("Casa Demo"):has-text("59,29")');
+  await g.waitForSelector(`tr:has-text("Casa Demo"):has-text("${expected}")`);
   const code = (await g.locator('tr:has-text("Casa Demo") code').first().textContent()).trim();
-  await g.screenshot({ path: `${OUT}/fact-1-facturas.png` });
   await g.click('tr:has-text("Casa Demo") a:has-text("Ver")');
   await g.waitForSelector(`text=${code}`);
-  await g.waitForSelector('text=Casa Demo Hostelería S.L.');
+  await g.waitForSelector('text=(máximo del mes)');
   await g.screenshot({ path: `${OUT}/fact-2-factura.png`, fullPage: true });
   await g.goBack();
   await g.click('button.chip:has-text("Facturas")');
-  await g.click('tr:has-text("Casa Demo") button:has-text("Cobrada")');
+  await g.waitForSelector('text=IBAN •••• 6789');
+  const [xmlDl] = await Promise.all([g.waitForEvent('download'), g.click('button:has-text("Generar remesa")')]);
+  const xml = require('fs').readFileSync(await xmlDl.path(), 'utf8');
+  if (!xml.includes('<IBAN>ES7921000813610123456789</IBAN>') || !xml.includes(`<EndToEndId>${code}</EndToEndId>`)) throw new Error('Fichero SEPA incorrecto');
+  await g.waitForSelector('.badge:has-text("Enviada")');
+  await g.screenshot({ path: `${OUT}/fact-1-facturas.png`, fullPage: true });
+  g.once('dialog', (d) => d.accept());
+  await g.click('tr:has(.badge:has-text("Enviada")) button:has-text("Cobrada")');
   await g.waitForSelector('tr:has-text("Casa Demo") .badge:has-text("Cobrada")');
   const [dl] = await Promise.all([g.waitForEvent('download'), g.click('button:has-text("Libro de facturas")')]);
   if (!require('fs').readFileSync(await dl.path(), 'utf8').includes(code)) throw new Error('El libro no incluye la factura');
+
+  // 3 bis. Planes.
+  await g.click('button.chip:has-text("Planes")');
+  await g.waitForSelector('.card:has-text("Premium")');
+  await g.screenshot({ path: `${OUT}/fact-5-planes.png` });
 
   // 4. El cliente ve su factura y abre una incidencia.
   const a = await page();
   await login(a, 'admin', 'admin1234');
   await a.waitForSelector('text=Mesas con cuenta abierta');
   await a.click('nav a:has-text("Suscripción y soporte")');
-  await a.waitForSelector('text=Plan TPV completo');
+  await a.waitForSelector('text=Profesional');
+  await a.waitForSelector('text=por mesa activa');
   await a.waitForSelector(`tr:has-text("${code}") .badge:has-text("Pagada")`);
   await a.click('button:has-text("+ Avisar a Loryand")');
   await a.fill('.modal label:has-text("Asunto") input', 'No imprime la cocina');

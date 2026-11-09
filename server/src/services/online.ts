@@ -11,7 +11,8 @@ type Q = typeof sql | Tx;
 export interface RedsysConfig { merchantCode: string; terminal: string; environment: 'test' | 'live'; card: boolean; bizum: boolean }
 
 export async function getRedsys(q: Q, establishmentId: string): Promise<{ enabled: boolean; config: RedsysConfig; secret: string | null } | null> {
-  const [r] = await q`select enabled, config, secret_enc from integrations where establishment_id = ${establishmentId} and kind = 'redsys'`;
+  // El cobro online solo funciona si el plan del local lo incluye.
+  const [r] = await q`select (i.enabled and 'online' = any(e.features)) as enabled, i.config, i.secret_enc from integrations i join establishments e on e.id = i.establishment_id where i.establishment_id = ${establishmentId} and i.kind = 'redsys'`;
   if (!r) return null;
   return { enabled: r.enabled, config: r.config, secret: r.secret_enc ? decryptSecret(r.secret_enc) : null };
 }

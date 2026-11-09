@@ -69,6 +69,8 @@ export default async function authRoutes(app: FastifyInstance) {
       recordFailure(req, 'waiter');
       throw new AppError(401, 'bad_credentials', 'Usuario o PIN incorrectos');
     }
+    const [plan] = await sql`select 'pda' = any(e.features) as pda from waiters w join establishments e on e.id = w.establishment_id where w.id = ${waiterId}`;
+    if (!plan?.pda) throw new AppError(403, 'feature_disabled', 'El acceso de camareros desde el móvil no está incluido en el plan de este local');
     if (accessHash) {
       // Un solo uso: si dos teléfonos lo intentan a la vez, solo entra el primero.
       const [used] = await sql`update waiter_access_tokens set used_at = now() where token_hash = ${accessHash} and used_at is null returning waiter_id`;
@@ -122,7 +124,7 @@ export default async function authRoutes(app: FastifyInstance) {
     }
     let onlinePayment = false;
     if (a.establishmentId) {
-      const [pay] = await sql`select 1 from integrations where establishment_id = ${a.establishmentId} and kind = 'redsys' and enabled and secret_enc is not null`;
+      const [pay] = await sql`select 1 from integrations i join establishments e on e.id = i.establishment_id where i.establishment_id = ${a.establishmentId} and i.kind = 'redsys' and i.enabled and i.secret_enc is not null and 'online' = any(e.features)`;
       onlinePayment = !!pay;
     }
     const mfaRequired = a.kind === 'user' && a.role === 'superadmin' && !a.mfa && config.requireGestorMfa;

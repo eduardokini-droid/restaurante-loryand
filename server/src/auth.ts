@@ -9,7 +9,7 @@ export const MODULES = ['config', 'tables', 'waiters', 'users', 'tpv', 'kitchen'
 export type Module = (typeof MODULES)[number];
 
 export type Actor =
-  | { kind: 'user'; id: string; name: string; role: 'superadmin' | 'admin' | 'staff'; establishmentId: string | null; permissions: string[]; mfa: boolean }
+  | { kind: 'user'; id: string; name: string; role: 'superadmin' | 'admin' | 'staff'; establishmentId: string | null; permissions: string[]; mfa: boolean; features: string[] | null }
   | { kind: 'waiter'; id: string; name: string; establishmentId: string; code: number };
 
 declare module 'fastify' {
@@ -43,7 +43,7 @@ export async function actorFromToken(token: string | undefined): Promise<Actor |
     select s.user_id, s.waiter_id,
            u.name as u_name, u.role, u.establishment_id as u_est, u.permissions, u.active as u_active, u.totp_enabled,
            w.name as w_name, w.establishment_id as w_est, w.code, w.active as w_active,
-           coalesce(e1.active, e2.active, true) as est_active
+           coalesce(e1.active, e2.active, true) as est_active, coalesce(e1.features, e2.features) as features
     from sessions s
     left join users u on u.id = s.user_id
     left join waiters w on w.id = s.waiter_id
@@ -52,7 +52,7 @@ export async function actorFromToken(token: string | undefined): Promise<Actor |
     where s.token_hash = ${sha(token)} and s.expires_at > now()`;
   if (!row || !row.est_active) return undefined;
   if (row.user_id && row.u_active) {
-    return { kind: 'user', id: row.user_id, name: row.u_name, role: row.role, establishmentId: row.u_est, permissions: row.permissions, mfa: row.totp_enabled };
+    return { kind: 'user', id: row.user_id, name: row.u_name, role: row.role, establishmentId: row.u_est, permissions: row.permissions, mfa: row.totp_enabled, features: row.features };
   }
   if (row.waiter_id && row.w_active) {
     return { kind: 'waiter', id: row.waiter_id, name: row.w_name, establishmentId: row.w_est, code: row.code };
@@ -62,6 +62,12 @@ export async function actorFromToken(token: string | undefined): Promise<Actor |
 
 export async function loadActor(req: FastifyRequest) {
   req.actor = await actorFromToken(req.cookies[COOKIE]);
+  // El gestor actúa sobre el local elegido: se aplican las funciones contratadas de ese local.
+  const h = req.headers['x-establishment-id'];
+  if (req.actor?.kind === 'user' && req.actor.role === 'superadmin' && typeof h === 'string' && /^[0-9a-f-]{36}$/i.test(h)) {
+    const [e] = await sql`select features from establishments where id = ${h}`;
+    req.actor.features = e?.features ?? null;
+  }
   // El gestor general debe activar la doble verificación antes de usar nada que no sea su propia cuenta.
   const a = req.actor;
   if (a?.kind === 'user' && a.role === 'superadmin' && !a.mfa && config.requireGestorMfa
@@ -86,8 +92,16 @@ export function establishmentOf(req: FastifyRequest): string {
   return a.establishmentId!;
 }
 
+/** Función del plan que necesita cada apartado (los demás van incluidos siempre). */
+export const MODULE_FEATURE: Partial<Record<Module, string>> = {
+  tpv: 'tpv', kitchen: 'kitchen', bar: 'bar', cash: 'cash', reservations: 'reservations', loyalty: 'loyalty', stock: 'stock',
+};
+export const hasFeature = (features: string[] | null | undefined, f: string) => !features || features.includes(f);
+
 export function can(a: Actor, module: Module): boolean {
   if (a.kind === 'waiter') return false;
+  const f = MODULE_FEATURE[module];
+  if (f && !hasFeature(a.features, f)) return false;
   return a.role === 'superadmin' || a.role === 'admin' || a.permissions.includes(module);
 }
 

@@ -28,7 +28,8 @@ let fetchImpl: typeof fetch = (...a) => fetch(...a);
 export const setMessagingFetch = (f: typeof fetch) => { fetchImpl = f; };
 
 export async function getWhatsApp(q: Q, establishmentId: string) {
-  const [r] = await q`select enabled, config, secret_enc from integrations where establishment_id = ${establishmentId} and kind = 'whatsapp'`;
+  // Los avisos por WhatsApp solo funcionan si el plan del local los incluye.
+  const [r] = await q`select (i.enabled and 'online' = any(e.features)) as enabled, i.config, i.secret_enc from integrations i join establishments e on e.id = i.establishment_id where i.establishment_id = ${establishmentId} and i.kind = 'whatsapp'`;
   if (!r) return null;
   const config: WhatsAppConfig = { ...DEFAULT_WHATSAPP, ...r.config, templates: { ...DEFAULT_WHATSAPP.templates, ...r.config.templates }, events: { ...DEFAULT_WHATSAPP.events, ...r.config.events } };
   return { enabled: r.enabled as boolean, config, token: r.secret_enc ? decryptSecret(r.secret_enc) : null };
@@ -119,7 +120,7 @@ export async function sendDueReminders(): Promise<number> {
            to_char(r.starts_at at time zone 'Europe/Madrid', 'DD/MM') as date, to_char(r.starts_at at time zone 'Europe/Madrid', 'HH24:MI') as time,
            (i.config->'events'->>'reminderHours')::int as hours, i.config->'events'->>'reservationReminder' as on, i.config->>'provider' as provider
     from reservations r
-    join establishments e on e.id = r.establishment_id and e.active
+    join establishments e on e.id = r.establishment_id and e.active and 'online' = any(e.features)
     join integrations i on i.establishment_id = r.establishment_id and i.kind = 'whatsapp' and i.enabled
     where r.status = 'confirmed' and r.reminder_sent_at is null and r.phone <> '' and r.whatsapp_consent
       and r.starts_at > now() + interval '30 minutes'

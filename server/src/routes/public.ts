@@ -14,15 +14,16 @@ const token = z.object({ token: z.string().min(10).max(64) });
 
 interface PublicTable {
   id: string; label: string; access_code: string; access_open: boolean; establishment_id: string;
-  qr_token: string; establishment_name: string; establishment_slug: string; active: boolean;
+  qr_token: string; establishment_name: string; establishment_slug: string; active: boolean; menu_enabled: boolean;
 }
 
 async function tableByToken(t: string): Promise<PublicTable> {
   const [row] = await sql<PublicTable[]>`
-    select t.id, t.label, t.access_code, t.access_open, t.establishment_id, t.qr_token, e.name as establishment_name, e.slug as establishment_slug, e.active
+    select t.id, t.label, t.access_code, t.access_open, t.establishment_id, t.qr_token, e.name as establishment_name, e.slug as establishment_slug, e.active, 'menu' = any(e.features) as menu_enabled
     from tables t join establishments e on e.id = t.establishment_id
     where t.qr_token = ${t} and t.active`;
   if (!row || !row.active) throw notFound('Mesa');
+  if (!row.menu_enabled) throw new AppError(403, 'feature_disabled', 'La carta digital no está disponible en este establecimiento');
   return row;
 }
 
@@ -54,7 +55,7 @@ export default async function publicRoutes(app: FastifyInstance) {
       select id, name, description, price_cents, options, allergens, category_id, subcategory_id, photo_url, translations
       from products where establishment_id = ${t.establishment_id} and visible and not archived order by name`;
     const [dailyMenu] = await sql`select name, price_cents, sections from daily_menus where establishment_id = ${t.establishment_id} and active`;
-    const [pay] = await sql`select 1 from integrations where establishment_id = ${t.establishment_id} and kind = 'redsys' and enabled and secret_enc is not null`;
+    const [pay] = await sql`select 1 from integrations i join establishments e on e.id = i.establishment_id where i.establishment_id = ${t.establishment_id} and i.kind = 'redsys' and i.enabled and i.secret_enc is not null and 'online' = any(e.features)`;
     return { establishment: t.establishment_name, slug: t.establishment_slug, table: { label: t.label, accessOpen: t.access_open }, categories, products, dailyMenu: dailyMenu ?? null, onlinePayment: !!pay };
   });
 

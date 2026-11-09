@@ -153,9 +153,15 @@ Desde ahora, los avisos por WhatsApp solo se envían a quien lo ha aceptado (cas
 ## 13. Facturar a tus clientes (gestor de Loryand)
 
 1. Entra como gestor → **Datos de facturación**: razón social, NIF, dirección, IBAN, días para pagar y series (por defecto `LR` para facturas y `LRR` para rectificativas).
-2. **Clientes → Contrato** de cada local: plan, cuota mensual sin IVA, forma de pago y, si no coinciden con los del local, sus datos fiscales. Sin NIF del cliente no se le puede facturar.
-3. Cada mes, **Facturas → Emitir cuotas**. Puedes pulsarlo varias veces: no se duplica ninguna.
-4. Cuando te paguen, pulsa **Cobrada**. Si una factura tiene un error, **Rectificar** (no se borran).
-5. Para la gestoría: **Libro de facturas (Excel)**.
+2. **Planes**: revisa los tres planes (Básico 2 €, Profesional 3 € y Premium 4 € por mesa activa al mes; son precios de ejemplo) y ajusta precios y funciones.
+3. **Clientes → Contrato** de cada local: elige su plan (se activan sus funciones), forma de pago y, si no coinciden con los del local, sus datos fiscales. Sin NIF del cliente no se le puede facturar.
+   - **Domiciliación**: pon el IBAN del cliente, la referencia del mandato y la fecha en que lo firmó. El cliente tiene que firmarte una orden de domiciliación SEPA con esa referencia; guárdala.
+   - En **Datos de facturación** pon tu IBAN; el identificador de acreedor se calcula con tu NIF (o pon el que te dé tu banco).
+4. Cada mes, **Facturas y remesas → Emitir cuotas**: se factura el máximo de mesas activas del mes. Puedes pulsarlo varias veces: no se duplica ninguna.
+5. **Remesas de recibos SEPA**: elige la fecha de cargo, genera el fichero y súbelo a tu banca electrónica (adeudos directos SEPA, esquema CORE). Cuando el banco lo abone, pulsa **Cobrada**; si devuelve algún recibo, márcalo como **Devuelto** (cuenta como impago y entra en la siguiente remesa).
+6. Si te pagan por transferencia, pulsa **Cobrada** en la factura. Si una factura tiene un error, **Rectificar** (no se borran).
+7. Para la gestoría: **Libro de facturas (Excel)**.
 
 Nota: estas facturas también tendrán que cumplir VERI*FACTU cuando se implante (lo dejamos para el final, junto con el de los restaurantes).
+
+**Importante al actualizar:** los locales que ya existían conservan todas sus funciones. Cuando asignes un plan a un local, ese local pasará a ver solo las funciones de su plan.

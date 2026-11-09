@@ -9,7 +9,8 @@ const EVENT: Record<string, string> = { reservation_confirmed: 'Reserva confirma
 
 /** Configuración de pagos online (Redsys) y avisos por WhatsApp. Solo administrador. */
 export default function Integraciones() {
-  const { refresh } = useSession();
+  const { refresh, me } = useSession();
+  const included = me?.establishment?.features?.includes('online') ?? true;
   const [data, setData] = useState<any>(null);
   const [log, setLog] = useState<any[]>([]);
   const load = useCallback(() => {
@@ -21,6 +22,7 @@ export default function Integraciones() {
   return (
     <div className="stack" style={{ maxWidth: 860 }}>
       <h1>Pagos online y WhatsApp</h1>
+      {!included && <p className="notice">El cobro online y los avisos por WhatsApp no están incluidos en el plan de este local: puedes dejarlos configurados, pero no funcionarán hasta que se contraten.</p>}
       <Redsys initial={data.redsys} notifyUrl={data.notifyUrl} onSaved={() => { load(); refresh(); }} />
       <WhatsApp initial={data.whatsapp} onSaved={load} />
       <div className="card" style={{ overflowX: 'auto' }}>

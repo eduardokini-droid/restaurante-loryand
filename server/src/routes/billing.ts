@@ -5,7 +5,10 @@ import { actorLabel, establishmentOf, requireActor } from '../auth.js';
 import { conflict, forbidden, notFound } from '../errors.js';
 import { parse } from '../validate.js';
 import { audit } from '../services/audit.js';
-import { DEFAULT_ISSUER, generateMonthly, getIssuer, invoiceNumber, issueInvoice, totals, type Line } from '../services/billing.js';
+import { DEFAULT_ISSUER, generateMonthly, getIssuer, invoiceNumber, issueInvoice, maxTables, periodLabel, totals, type Line } from '../services/billing.js';
+import { buildPain008, cleanIban, creditorId, validCreditorId, validIban } from '../services/sepa.js';
+import { decryptSecret, encryptSecret } from '../services/secrets.js';
+import { FEATURES } from './platform.js';
 
 function requireSuper(req: FastifyRequest) {
   const a = requireActor(req);
@@ -52,7 +55,10 @@ export default async function billingRoutes(app: FastifyInstance) {
     const s = z.string().trim();
     const b = parse(z.object({
       name: s.max(160), taxId: s.max(20), address: s.max(200), postalCode: s.max(10), city: s.max(80), province: s.max(80),
-      email: s.max(120), phone: s.max(30), iban: s.max(40).transform((v) => v.replace(/\s/g, '').toUpperCase()),
+      email: s.max(120), phone: s.max(30),
+      iban: s.max(40).transform((v) => cleanIban(v)).refine((v) => v === '' || validIban(v), 'El IBAN no es válido'),
+      bic: s.max(11).transform((v) => v.toUpperCase()).refine((v) => v === '' || /^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$/.test(v), 'El BIC no es válido'),
+      creditorId: s.max(35).transform((v) => v.replace(/\s/g, '').toUpperCase()).refine((v) => v === '' || validCreditorId(v), 'El identificador de acreedor no es válido'),
       series: s.min(1).max(10).regex(/^[A-Z0-9]+$/i, 'Serie: solo letras y números').transform((v) => v.toUpperCase()),
       rectifyingSeries: s.min(1).max(10).regex(/^[A-Z0-9]+$/i, 'Serie: solo letras y números').transform((v) => v.toUpperCase()),
       paymentDays: z.number().int().min(0).max(120), footer: s.max(500),
@@ -73,8 +79,12 @@ export default async function billingRoutes(app: FastifyInstance) {
     return sql`
       select e.id, e.slug, e.name, e.legal_name, e.tax_id, e.email, e.phone, e.features, e.active, e.created_at,
              (select count(*)::int from tables t where t.establishment_id = e.id and t.active) as active_tables,
-             c.plan_name, c.monthly_cents, c.vat_rate, to_char(c.start_date, 'YYYY-MM-DD') as start_date, c.status as contract_status, c.payment_method,
-             c.billing_name, c.billing_tax_id, c.billing_address, c.billing_email, c.notes,
+             c.plan_name, c.plan_id, c.monthly_cents, c.price_per_table_cents, c.vat_rate, to_char(c.start_date, 'YYYY-MM-DD') as start_date,
+             to_char(c.renewal_date, 'YYYY-MM-DD') as renewal_date, c.status as contract_status, c.payment_method,
+             c.billing_name, c.billing_tax_id, c.billing_address, c.billing_email, c.notes, c.iban_last4, c.mandate_ref, to_char(c.mandate_date, 'YYYY-MM-DD') as mandate_date,
+             (select coalesce(max(u.active_tables), 0)::int from table_usage u where u.establishment_id = e.id
+                and u.day >= date_trunc('month', now() at time zone 'Europe/Madrid')::date) as max_tables_month,
+             (select count(*)::int from platform_invoices i where i.establishment_id = e.id and i.returned_at is not null and i.status = 'issued') as returned,
              (select coalesce(sum(i.total_cents), 0)::int from platform_invoices i where i.establishment_id = e.id and i.status = 'issued') as pending_cents,
              (select count(*)::int from platform_invoices i where i.establishment_id = e.id and i.status = 'issued' and i.kind = 'invoice' and i.due_date < current_date) as overdue,
              (select count(*)::int from support_tickets s where s.establishment_id = e.id and s.status <> 'resolved') as open_tickets
@@ -89,18 +99,35 @@ export default async function billingRoutes(app: FastifyInstance) {
       planName: s.min(1).max(80), monthlyCents: z.number().int().min(0).max(10_000_000), vatRate: z.number().min(0).max(30),
       startDate: date, status: z.enum(['active', 'paused', 'cancelled']), paymentMethod: z.enum(['transfer', 'direct_debit', 'card', 'other']),
       billingName: s.max(160), billingTaxId: s.max(20), billingAddress: s.max(200), billingEmail: s.max(120), notes: s.max(1000),
+      planId: z.string().uuid().nullable(), pricePerTableCents: z.number().int().min(0).max(1_000_000), renewalDate: date.nullable(),
+      iban: s.max(40).transform((v) => cleanIban(v)).refine((v) => v === '' || validIban(v), 'El IBAN del cliente no es válido'),
+      mandateRef: s.max(35).regex(/^[A-Za-z0-9/\-?:().,'+ ]*$/, 'La referencia del mandato solo admite letras, números y - / . ,'),
+      mandateDate: date.nullable(),
     }).partial(), req.body);
     const [e] = await sql`select 1 from establishments where id = ${id}`;
     if (!e) throw notFound('Establecimiento');
     const map: Record<string, string> = { planName: 'plan_name', monthlyCents: 'monthly_cents', vatRate: 'vat_rate', startDate: 'start_date', status: 'status',
-      paymentMethod: 'payment_method', billingName: 'billing_name', billingTaxId: 'billing_tax_id', billingAddress: 'billing_address', billingEmail: 'billing_email', notes: 'notes' };
+      paymentMethod: 'payment_method', billingName: 'billing_name', billingTaxId: 'billing_tax_id', billingAddress: 'billing_address', billingEmail: 'billing_email', notes: 'notes',
+      planId: 'plan_id', pricePerTableCents: 'price_per_table_cents', renewalDate: 'renewal_date', mandateRef: 'mandate_ref', mandateDate: 'mandate_date' };
     const cols: Record<string, unknown> = { updated_at: new Date() };
     for (const [k, c] of Object.entries(map)) if (b[k as keyof typeof b] !== undefined) cols[c] = b[k as keyof typeof b];
+    // El IBAN del cliente se guarda cifrado; nunca se devuelve entero.
+    if (b.iban !== undefined) { cols.iban_enc = b.iban ? encryptSecret(b.iban) : null; cols.iban_last4 = b.iban ? b.iban.slice(-4) : null; }
     return sql.begin(async (tx) => {
       await tx`insert into contracts (establishment_id) values (${id}) on conflict do nothing`;
+      if (b.planId) {
+        const [p] = await tx`select name, features, monthly_cents, price_per_table_cents from plans where id = ${b.planId}`;
+        if (!p) throw notFound('Plan');
+        // Al elegir un plan se activan sus funciones; los precios del plan solo se toman si no se indican otros.
+        cols.plan_name = b.planName ?? p.name;
+        if (b.monthlyCents === undefined) cols.monthly_cents = p.monthly_cents;
+        if (b.pricePerTableCents === undefined) cols.price_per_table_cents = p.price_per_table_cents;
+        await tx`update establishments set features = ${p.features} where id = ${id}`;
+      }
       const [c] = await tx`update contracts set ${tx(cols)} where establishment_id = ${id} returning *`;
-      await audit(tx, id, actorLabel(a), 'contract.update', b);
-      return c;
+      await audit(tx, id, actorLabel(a), 'contract.update', { ...b, iban: b.iban ? `••••${b.iban.slice(-4)}` : b.iban });
+      const { iban_enc: _hidden, ...safe } = c;
+      return safe;
     });
   });
 
@@ -211,12 +238,13 @@ export default async function billingRoutes(app: FastifyInstance) {
   // ---------- Vista del cliente: su suscripción ----------
   app.get('/api/subscription', async (req) => {
     const { est } = requireClientAdmin(req);
-    const [c] = await sql`select c.plan_name, c.monthly_cents, c.vat_rate, to_char(c.start_date, 'YYYY-MM-DD') as start_date, c.status, c.payment_method, e.features
+    const [c] = await sql`select c.plan_name, c.monthly_cents, c.price_per_table_cents, c.vat_rate, to_char(c.start_date, 'YYYY-MM-DD') as start_date, c.status, c.payment_method, e.features
                           from establishments e left join contracts c on c.establishment_id = e.id where e.id = ${est}`;
     const invoices = await sql`select * from platform_invoices where establishment_id = ${est} order by issue_date desc, number desc limit 100`;
     const issuer = await getIssuer(sql);
     return {
       contract: c?.plan_name ? c : null, features: c?.features ?? [],
+      tables: { now: (await sql`select count(*)::int as n from tables where establishment_id = ${est} and active`)[0].n, max: await maxTables(sql, est, new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' }).slice(0, 7)) },
       invoices: invoices.map(shape),
       payTo: { name: issuer.name || DEFAULT_ISSUER.name, iban: issuer.iban, email: issuer.email, phone: issuer.phone },
     };
@@ -320,6 +348,145 @@ export default async function billingRoutes(app: FastifyInstance) {
     return loadTicket(id);
   });
 
+  // ---------- Planes ----------
+  const planBody = z.object({
+    name: z.string().trim().min(1).max(60), description: z.string().trim().max(300),
+    features: z.array(z.enum(FEATURES)), monthlyCents: z.number().int().min(0).max(10_000_000),
+    pricePerTableCents: z.number().int().min(0).max(1_000_000), sort: z.number().int().min(0).max(100), active: z.boolean(),
+  });
+  app.get('/api/platform/plans', async (req) => {
+    requireSuper(req);
+    return sql`select p.*, (select count(*)::int from contracts c where c.plan_id = p.id) as clients from plans p order by p.sort, p.name`;
+  });
+  app.post('/api/platform/plans', async (req) => {
+    const a = requireSuper(req);
+    const b = parse(planBody.partial({ description: true, sort: true, active: true }), req.body);
+    const [p] = await sql`insert into plans (name, description, features, monthly_cents, price_per_table_cents, sort)
+                          values (${b.name}, ${b.description ?? ''}, ${b.features}, ${b.monthlyCents}, ${b.pricePerTableCents}, ${b.sort ?? 0}) returning *`;
+    await sql.begin((tx) => audit(tx, null, actorLabel(a), 'plan.create', { id: p.id, name: b.name }));
+    return p;
+  });
+  app.put('/api/platform/plans/:id', async (req) => {
+    const a = requireSuper(req);
+    const { id } = parse(uuid, req.params);
+    const b = parse(planBody.partial(), req.body);
+    const map: Record<string, string> = { name: 'name', description: 'description', features: 'features', monthlyCents: 'monthly_cents', pricePerTableCents: 'price_per_table_cents', sort: 'sort', active: 'active' };
+    const cols: Record<string, unknown> = {};
+    for (const [k, c] of Object.entries(map)) if (b[k as keyof typeof b] !== undefined) cols[c] = b[k as keyof typeof b];
+    return sql.begin(async (tx) => {
+      const [p] = Object.keys(cols).length ? await tx`update plans set ${tx(cols)} where id = ${id} returning *` : await tx`select * from plans where id = ${id}`;
+      if (!p) throw notFound('Plan');
+      // Cambiar las funciones de un plan las cambia en todos los locales que lo tienen. Los precios ya pactados no se tocan.
+      if (b.features) await tx`update establishments set features = ${b.features} where id in (select establishment_id from contracts where plan_id = ${id})`;
+      if (b.name) await tx`update contracts set plan_name = ${b.name} where plan_id = ${id}`;
+      await audit(tx, null, actorLabel(a), 'plan.update', { id, ...b });
+      return p;
+    });
+  });
+
+  /** Mesas que se facturarían ahora mismo por local (máximo del mes indicado). */
+  app.get('/api/platform/table-usage', async (req) => {
+    requireSuper(req);
+    const { period: p } = parse(z.object({ period }), req.query);
+    const rows = await sql`select id, name from establishments order by name`;
+    return Promise.all(rows.map(async (e) => ({ id: e.id, name: e.name, maxTables: await maxTables(sql, e.id, p), period: periodLabel(p) })));
+  });
+
+  // ---------- Remesas SEPA ----------
+  /** Facturas que se pueden cobrar por domiciliación: pendientes, de clientes con IBAN y mandato, y no incluidas en otra remesa. */
+  app.get('/api/platform/remittances/candidates', async (req) => {
+    requireSuper(req);
+    const rows = await sql`
+      select i.id, i.series, i.year, i.number, i.issue_date, i.due_date, i.total_cents, i.returned_at, i.lines, i.status, i.kind, e.name as establishment,
+             c.iban_last4, c.mandate_ref, (c.iban_enc is not null and c.mandate_ref <> '' and c.mandate_date is not null) as ready
+      from platform_invoices i join establishments e on e.id = i.establishment_id join contracts c on c.establishment_id = i.establishment_id
+      where i.status = 'issued' and i.kind = 'invoice' and i.remittance_id is null and c.payment_method = 'direct_debit'
+      order by e.name, i.issue_date`;
+    return rows.map(shape);
+  });
+
+  app.get('/api/platform/remittances', async (req) => {
+    requireSuper(req);
+    return sql`select id, msg_id, to_char(collection_date, 'YYYY-MM-DD') as collection_date, count, total_cents, status, created_at from remittances order by created_at desc limit 100`;
+  });
+
+  app.post('/api/platform/remittances', async (req) => {
+    const a = requireSuper(req);
+    const b = parse(z.object({ invoiceIds: z.array(z.string().uuid()).min(1).max(500), collectionDate: date }), req.body);
+    const issuer = await getIssuer(sql);
+    if (!issuer.iban || !validIban(issuer.iban)) throw conflict('issuer_iban', 'Falta tu IBAN (el de Loryand) en «Datos de facturación»');
+    if (!issuer.taxId) throw conflict('issuer_incomplete', 'Falta tu NIF en «Datos de facturación»');
+    const cid = issuer.creditorId || creditorId(issuer.taxId);
+    const [{ today }] = await sql`select to_char(now() at time zone 'Europe/Madrid', 'YYYY-MM-DD') as today`;
+    if (b.collectionDate <= today) throw conflict('collection_date', 'La fecha de cargo debe ser posterior a hoy (el banco necesita al menos un día hábil)');
+    return sql.begin(async (tx) => {
+      const rows = await tx`
+        select i.*, c.iban_enc, c.mandate_ref, to_char(c.mandate_date, 'YYYY-MM-DD') as mandate_date
+        from platform_invoices i join contracts c on c.establishment_id = i.establishment_id
+        where i.id in ${tx(b.invoiceIds)} for update of i`;
+      if (rows.length !== b.invoiceIds.length) throw notFound('Factura');
+      for (const r of rows) {
+        const code = invoiceNumber(r as never);
+        if (r.status !== 'issued' || r.kind !== 'invoice' || r.remittance_id) throw conflict('not_collectable', `La factura ${code} no está pendiente o ya va en otra remesa`);
+        if (!r.iban_enc || !r.mandate_ref || !r.mandate_date) throw conflict('no_mandate', `Al cliente de la factura ${code} le faltan el IBAN o el mandato SEPA`);
+      }
+      const [{ n }] = await tx`select count(*)::int + 1 as n from remittances`;
+      const createdAt = new Date();
+      const msgId = `LORYAND-${createdAt.toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' }).replace(/-/g, '')}-${String(n).padStart(4, '0')}`;
+      const xml = buildPain008({
+        msgId, createdAt, collectionDate: b.collectionDate,
+        creditor: { name: issuer.name, iban: issuer.iban, bic: issuer.bic, id: cid },
+        debits: rows.map((r) => ({
+          endToEndId: invoiceNumber(r as never), amountCents: r.total_cents, mandateId: r.mandate_ref, mandateDate: r.mandate_date,
+          debtorName: r.customer.name, debtorIban: decryptSecret(r.iban_enc), concept: `Factura ${invoiceNumber(r as never)} ${r.lines[0]?.description ?? ''}`,
+        })),
+      });
+      const total = rows.reduce((s2, r) => s2 + r.total_cents, 0);
+      const [rem] = await tx`insert into remittances (msg_id, collection_date, count, total_cents, xml, created_by)
+                             values (${msgId}, ${b.collectionDate}, ${rows.length}, ${total}, ${xml}, ${actorLabel(a)}) returning id, msg_id`;
+      await tx`update platform_invoices set remittance_id = ${rem.id}, returned_at = null where id in ${tx(b.invoiceIds)}`;
+      await audit(tx, null, actorLabel(a), 'remittance.create', { id: rem.id, count: rows.length, total });
+      return { id: rem.id, msgId: rem.msg_id, count: rows.length, totalCents: total };
+    });
+  });
+
+  app.get('/api/platform/remittances/:id/xml', async (req, reply) => {
+    requireSuper(req);
+    const { id } = parse(uuid, req.params);
+    const [r] = await sql`select msg_id, xml from remittances where id = ${id}`;
+    if (!r) throw notFound('Remesa');
+    reply.header('content-type', 'application/xml; charset=utf-8').header('content-disposition', `attachment; filename="${r.msg_id}.xml"`);
+    return r.xml;
+  });
+
+  /** El banco ha abonado la remesa: sus facturas quedan cobradas (salvo las que se marquen después como devueltas). */
+  app.post('/api/platform/remittances/:id/collected', async (req) => {
+    const a = requireSuper(req);
+    const { id } = parse(uuid, req.params);
+    return sql.begin(async (tx) => {
+      const [r] = await tx`update remittances set status = 'collected' where id = ${id} returning collection_date`;
+      if (!r) throw notFound('Remesa');
+      const u = await tx`update platform_invoices set status = 'paid', paid_at = ${r.collection_date}, paid_method = 'Domiciliación SEPA'
+                         where remittance_id = ${id} and status = 'issued' returning id`;
+      await audit(tx, null, actorLabel(a), 'remittance.collected', { id, invoices: u.length });
+      return { ok: true, invoices: u.length };
+    });
+  });
+
+  /** Recibo devuelto por el banco: la factura vuelve a estar pendiente (impagada) y puede ir en otra remesa. */
+  app.post('/api/platform/invoices/:id/returned', async (req) => {
+    const a = requireSuper(req);
+    const { id } = parse(uuid, req.params);
+    return sql.begin(async (tx) => {
+      const [i] = await tx`update platform_invoices set status = 'issued', paid_at = null, paid_method = null, remittance_id = null,
+                                  returned_at = (now() at time zone 'Europe/Madrid')::date
+                           where id = ${id} and kind = 'invoice' and status <> 'rectified' returning *`;
+      if (!i) throw notFound('Factura');
+      await audit(tx, i.establishment_id, actorLabel(a), 'invoice.returned', { id });
+      return shape(i);
+    });
+  });
+
   /** Resumen para la portada del gestor. */
   app.get('/api/platform/summary', async (req) => {
     requireSuper(req);
@@ -328,6 +495,9 @@ export default async function billingRoutes(app: FastifyInstance) {
              (select count(*)::int from contracts where status = 'active') as active_contracts,
              (select coalesce(sum(total_cents), 0)::int from platform_invoices where status = 'issued') as pending_cents,
              (select count(*)::int from platform_invoices where status = 'issued' and kind = 'invoice' and due_date < current_date) as overdue,
+             (select count(*)::int from platform_invoices where status = 'issued' and returned_at is not null) as returned,
+             (select coalesce(sum(round((monthly_cents + price_per_table_cents * (select count(*) from tables t where t.establishment_id = c.establishment_id and t.active)) * (1 + vat_rate / 100))), 0)::int
+                from contracts c join establishments e on e.id = c.establishment_id where c.status = 'active' and e.active) as expected_month_cents,
              (select count(*)::int from support_tickets where status <> 'resolved') as open_tickets,
              (select count(*)::int from support_tickets where unread_gestor and status <> 'resolved') as unread_tickets`;
     return s;

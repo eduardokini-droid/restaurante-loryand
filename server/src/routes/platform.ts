@@ -6,7 +6,8 @@ import { conflict, forbidden, notFound } from '../errors.js';
 import { parse } from '../validate.js';
 import { audit } from '../services/audit.js';
 
-const FEATURES = ['tpv', 'pda', 'kitchen', 'bar', 'menu', 'tables', 'cash'] as const;
+/** Funciones que se contratan por local. Configuración, mesas, personal, jornada y textos legales van siempre incluidos. */
+export const FEATURES = ['tpv', 'pda', 'kitchen', 'bar', 'menu', 'cash', 'reservations', 'loyalty', 'stock', 'online'] as const;
 
 function requireSuper(req: FastifyRequest) {
   const a = requireActor(req);

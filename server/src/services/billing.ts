@@ -7,11 +7,13 @@ const TZ = 'Europe/Madrid';
 /** Datos de Loryand como emisor de las facturas. */
 export interface Issuer {
   name: string; taxId: string; address: string; postalCode: string; city: string; province: string;
-  email: string; phone: string; iban: string;
+  email: string; phone: string; iban: string; bic: string;
+  /** Identificador de acreedor SEPA (si se deja vacío se calcula con el NIF y el sufijo 000). */
+  creditorId: string;
   series: string; rectifyingSeries: string; paymentDays: number; footer: string;
 }
 export const DEFAULT_ISSUER: Issuer = {
-  name: '', taxId: '', address: '', postalCode: '', city: '', province: '', email: '', phone: '', iban: '',
+  name: '', taxId: '', address: '', postalCode: '', city: '', province: '', email: '', phone: '', iban: '', bic: '', creditorId: '',
   series: 'LR', rectifyingSeries: 'LRR', paymentDays: 15, footer: '',
 };
 
@@ -57,7 +59,7 @@ const today = async (q: Q): Promise<string> => (await q`select to_char(now() at 
  */
 export async function issueInvoice(tx: Tx, o: {
   establishmentId: string; lines: Line[]; actor: string; issueDate?: string; period?: string | null;
-  kind?: 'invoice' | 'rectifying'; rectifiesId?: string; reason?: string; customer?: Customer;
+  kind?: 'invoice' | 'rectifying'; rectifiesId?: string; reason?: string; customer?: Customer; maxTables?: number | null;
 }) {
   if (!o.lines.length) throw badRequest('La factura necesita al menos una línea');
   await tx`select id from platform_settings where id for update`;
@@ -79,9 +81,9 @@ export async function issueInvoice(tx: Tx, o: {
   const [due] = await tx`select (${issueDate}::date + ${issuer.paymentDays}::int)::text as d`;
   const [inv] = await tx`
     insert into platform_invoices (establishment_id, kind, series, year, number, issue_date, due_date, period, rectifies_id, reason,
-                                   issuer, customer, lines, base_cents, vat_cents, total_cents, created_by)
+                                   issuer, customer, lines, base_cents, vat_cents, total_cents, created_by, max_tables)
     values (${o.establishmentId}, ${kind}, ${series}, ${year}, ${last.n + 1}, ${issueDate}, ${due.d}, ${o.period ?? null}, ${o.rectifiesId ?? null}, ${o.reason ?? null},
-            ${tx.json(issuer as never)}, ${tx.json(customer as never)}, ${tx.json(o.lines as never)}, ${t.base}, ${t.vat}, ${t.total}, ${o.actor})
+            ${tx.json(issuer as never)}, ${tx.json(customer as never)}, ${tx.json(o.lines as never)}, ${t.base}, ${t.vat}, ${t.total}, ${o.actor}, ${o.maxTables ?? null})
     returning *`;
   return inv;
 }
@@ -89,22 +91,38 @@ export async function issueInvoice(tx: Tx, o: {
 const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 export const periodLabel = (p: string) => `${MONTHS[Number(p.slice(5, 7)) - 1]} de ${p.slice(0, 4)}`;
 
+/** Máximo de mesas activas de un local en un mes (si el mes está en curso, cuenta también las de ahora). */
+export async function maxTables(q: Q, establishmentId: string, period: string): Promise<number> {
+  const [r] = await q`
+    select greatest(
+      coalesce((select max(active_tables) from table_usage where establishment_id = ${establishmentId}
+                and day between ${period + '-01'}::date and (${period + '-01'}::date + interval '1 month - 1 day')::date), 0),
+      case when to_char(now() at time zone ${TZ}, 'YYYY-MM') = ${period}
+           then (select count(*)::int from tables where establishment_id = ${establishmentId} and active) else 0 end) as n`;
+  return Number(r.n);
+}
+
 /** Cuotas del mes para todos los contratos activos con cuota. Repetible: no duplica las ya emitidas. */
 export async function generateMonthly(period: string, actor: string, issueDate?: string) {
   const created: string[] = [];
   const skipped: { establishment: string; reason: string }[] = [];
   const rows = await sql`
     select c.*, e.name from contracts c join establishments e on e.id = c.establishment_id
-    where c.status = 'active' and c.monthly_cents > 0 and e.active
+    where c.status = 'active' and (c.monthly_cents > 0 or c.price_per_table_cents > 0) and e.active
       and c.start_date <= (${period + '-01'}::date + interval '1 month - 1 day')
       and not exists (select 1 from platform_invoices i where i.establishment_id = c.establishment_id and i.period = ${period} and i.kind = 'invoice')
     order by e.name`;
   for (const c of rows) {
     try {
-      const inv = await sql.begin((tx) => issueInvoice(tx, {
-        establishmentId: c.establishment_id, actor, period, issueDate,
-        lines: [{ description: `${c.plan_name} · cuota de ${periodLabel(period)}`, qty: 1, unitCents: c.monthly_cents, vatRate: Number(c.vat_rate) }],
-      }));
+      const tables = c.price_per_table_cents > 0 ? await maxTables(sql, c.establishment_id, period) : 0;
+      const vatRate = Number(c.vat_rate);
+      const lines: Line[] = [];
+      if (c.monthly_cents > 0) lines.push({ description: `${c.plan_name} · cuota de ${periodLabel(period)}`, qty: 1, unitCents: c.monthly_cents, vatRate });
+      if (c.price_per_table_cents > 0 && tables > 0) {
+        lines.push({ description: `${c.monthly_cents > 0 ? 'Mesas' : c.plan_name + ' · mesas'} activas en ${periodLabel(period)} (máximo del mes)`, qty: tables, unitCents: c.price_per_table_cents, vatRate });
+      }
+      if (!lines.length) { skipped.push({ establishment: c.name, reason: 'Sin mesas activas ese mes' }); continue; }
+      const inv = await sql.begin((tx) => issueInvoice(tx, { establishmentId: c.establishment_id, actor, period, issueDate, lines, maxTables: c.price_per_table_cents > 0 ? tables : null }));
       created.push(inv.id);
     } catch (e) {
       const msg = (e as Error).message;

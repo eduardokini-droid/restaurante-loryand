@@ -3,10 +3,9 @@ import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { money } from '../lib/format';
 import { ErrorText, Modal, useAction, useToast } from '../components/ui';
-import { PAY_METHOD, TICKET_CATEGORY, TICKET_PRIORITY, TICKET_STATUS, TicketThread } from './Plataforma';
+import { FEATURE_LABEL, PAY_METHOD, TICKET_CATEGORY, TICKET_PRIORITY, TICKET_STATUS, TicketThread } from './Plataforma';
 
 const fmtDate = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString('es-ES');
-const FEATURE_LABEL: Record<string, string> = { tpv: 'TPV', pda: 'PDA camareros', kitchen: 'Cocina', bar: 'Barra', menu: 'Carta QR', tables: 'Mesas', cash: 'Caja' };
 
 /** El administrador del local ve su plan, sus facturas de Loryand y sus incidencias de soporte. */
 export default function Suscripcion() {
@@ -29,9 +28,10 @@ export default function Suscripcion() {
           <h3>Tu plan</h3>
           {s.contract ? <>
             <div style={{ fontSize: '1.3rem', fontWeight: 700 }}>{s.contract.plan_name}</div>
-            <p>{money(s.contract.monthly_cents)} al mes + IVA ({String(s.contract.vat_rate).replace('.', ',')} %) · {PAY_METHOD[s.contract.payment_method]}</p>
+            <p>{[s.contract.monthly_cents > 0 && `${money(s.contract.monthly_cents)} al mes`, s.contract.price_per_table_cents > 0 && `${money(s.contract.price_per_table_cents)} por mesa activa`].filter(Boolean).join(' + ') || 'Sin cuota'} + IVA ({String(s.contract.vat_rate).replace('.', ',')} %) · {PAY_METHOD[s.contract.payment_method]}</p>
+            {s.contract.price_per_table_cents > 0 && <p className="small muted">Se factura el máximo de mesas activas de cada mes. Este mes: {s.tables.max} (ahora {s.tables.now}).</p>}
           </> : <p className="muted">Todavía no hay un contrato registrado.</p>}
-          <div className="row" style={{ gap: '.3rem' }}>{s.features.map((f: string) => <span key={f} className="badge">{FEATURE_LABEL[f] ?? f}</span>)}</div>
+          <div className="row" style={{ gap: '.3rem' }}>{s.features.filter((f: string) => FEATURE_LABEL[f]).map((f: string) => <span key={f} className="badge">{FEATURE_LABEL[f] ?? f}</span>)}</div>
         </div>
         <div className="card">
           <h3>Pagos</h3>
