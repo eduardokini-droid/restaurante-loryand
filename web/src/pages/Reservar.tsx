@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { money } from '../lib/format';
 import { ErrorText, useAction } from '../components/ui';
+import { LegalLinks } from './Legal';
 
 /** Formulario público de reservas. Genera una solicitud que el local confirma. */
 export default function Reservar() {
@@ -10,7 +11,7 @@ export default function Reservar() {
   const [info, setInfo] = useState<any>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
-  const [f, setF] = useState({ name: '', phone: '', email: '', partySize: 2, date: tomorrow, time: '', notes: '', zonePref: '' });
+  const [f, setF] = useState({ name: '', phone: '', email: '', partySize: 2, date: tomorrow, time: '', notes: '', zonePref: '', acceptPrivacy: false, whatsappConsent: false });
   const [done, setDone] = useState<any>(null);
   const { busy, error, run } = useAction();
   useEffect(() => { api(`/api/public/booking/${slug}`).then(setInfo).catch((e) => setProblem(e.message)); }, [slug]);
@@ -58,10 +59,19 @@ export default function Reservar() {
             <label>Comentarios (alergias, celebración, trona…)<textarea rows={2} value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} /></label>
             {deposit > 0 && <p className="notice small">Para grupos de {info.depositFromParty} o más personas se requiere una fianza de {money(deposit)}.</p>}
             {info.cancellationPolicy && <p className="small muted">{info.cancellationPolicy}</p>}
+            <p className="small muted" style={{ lineHeight: 1.45 }}>{info.privacyNotice}</p>
+            <label className="check"><input type="checkbox" checked={f.acceptPrivacy} onChange={(e) => setF({ ...f, acceptPrivacy: e.target.checked })} />
+              <span>He leído y acepto la <a href={`/legal/${slug}`} target="_blank" rel="noreferrer">política de privacidad</a>. Si indico alergias, consiento que se usen para preparar mi servicio.</span></label>
+            {info.whatsappNotice && <>
+              <label className="check"><input type="checkbox" checked={f.whatsappConsent} onChange={(e) => setF({ ...f, whatsappConsent: e.target.checked })} />
+                <span>Quiero recibir la confirmación y el recordatorio por WhatsApp (opcional).</span></label>
+              <p className="small muted" style={{ marginTop: '-.3rem' }}>{info.whatsappNotice}</p>
+            </>}
             <ErrorText error={error} />
-            <button className="btn primary block" disabled={busy || !f.name || !f.phone || !f.time} onClick={send}>{busy ? 'Enviando…' : 'Solicitar reserva'}</button>
+            <button className="btn primary block" disabled={busy || !f.name || !f.phone || !f.time || !f.acceptPrivacy} onClick={send}>{busy ? 'Enviando…' : 'Solicitar reserva'}</button>
           </div>
         )}
+        <LegalLinks slug={slug} />
       </div>
     </div>
   );

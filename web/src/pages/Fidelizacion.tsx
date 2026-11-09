@@ -3,6 +3,8 @@ import QRCode from 'qrcode';
 import { api } from '../lib/api';
 import { dateTime, money, toCents } from '../lib/format';
 import { ErrorText, Modal, useAction, useToast } from '../components/ui';
+import { useSession } from '../lib/session';
+import { getSelectedEstablishment } from '../lib/api';
 
 const couponText = (k: any) => (k.kind === 'percent' ? `${k.value} % de descuento` : `${money(k.value)} de descuento`);
 
@@ -21,6 +23,15 @@ export default function Fidelizacion() {
   }, [q]);
   useEffect(load, [load]);
   const inactive = customers.filter((c) => c.inactive).length;
+  const exportData = async (c: any) => {
+    const res = await fetch(`/api/loyalty/customers/${c.id}/export`, { headers: { 'x-establishment-id': getSelectedEstablishment() ?? '' } });
+    if (!res.ok) return;
+    const a = document.createElement('a'); a.href = URL.createObjectURL(await res.blob()); a.download = `datos-${c.name.replace(/\s+/g, '-').toLowerCase()}.json`; a.click();
+  };
+  const erase = (c: any) => run(async () => {
+    if (!confirm(`¿Suprimir los datos de ${c.name}? Se borran su ficha, puntos y cupones. Las ventas se conservan sin su nombre. No se puede deshacer.`)) return;
+    await api(`/api/loyalty/customers/${c.id}/erase`, { body: {} }); load();
+  });
   return (
     <div className="stack">
       <div className="spread"><h1>Fidelización</h1>
@@ -42,6 +53,8 @@ export default function Fidelizacion() {
               <td className="right"><div className="row" style={{ gap: '.3rem', justifyContent: 'flex-end' }}>
                 <button className="btn small" onClick={() => setCouponFor(c)}>Crear cupón QR</button>
                 <button className="btn small ghost" onClick={() => setCard(c)}>Tarjeta digital</button>
+                <button className="btn small ghost" title="Derecho de acceso: descarga todos sus datos" onClick={() => exportData(c)}>Exportar datos</button>
+                <button className="btn small ghost danger" title="Derecho de supresión" onClick={() => erase(c)}>Suprimir</button>
               </div></td>
             </tr>
           ))}</tbody>
@@ -72,17 +85,22 @@ export default function Fidelizacion() {
 }
 
 export function CustomerForm({ onClose, onDone, initialName = '' }: { onClose: () => void; onDone: (c: any) => void; initialName?: string }) {
-  const [f, setF] = useState({ name: initialName, phone: '', email: '', notes: '', marketingConsent: false });
+  const [f, setF] = useState({ name: initialName, phone: '', email: '', notes: '', marketingConsent: false, privacyAccepted: false });
   const { busy, error, run } = useAction();
+  const { me } = useSession();
+  const [notice, setNotice] = useState('');
+  useEffect(() => { if (me?.establishment?.slug) api<any>(`/api/public/legal/${me.establishment.slug}`).then((t) => setNotice(t.layers.loyalty)).catch(() => {}); }, [me?.establishment?.slug]);
   return (
     <Modal title="Nuevo cliente" onClose={onClose}>
       <label>Nombre<input autoFocus value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></label>
       <label>Teléfono<input type="tel" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} /></label>
       <label>Correo (opcional)<input value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} /></label>
       <label>Notas (preferencias, alergias…)<input value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} /></label>
-      <label className="check"><input type="checkbox" checked={f.marketingConsent} onChange={(e) => setF({ ...f, marketingConsent: e.target.checked })} /> Acepta recibir comunicaciones comerciales</label>
+      {notice && <details className="small muted"><summary>Información que hay que dar al cliente</summary><p style={{ lineHeight: 1.45 }}>{notice}</p></details>}
+      <label className="check"><input type="checkbox" checked={f.privacyAccepted} onChange={(e) => setF({ ...f, privacyAccepted: e.target.checked })} /> <span>He informado al cliente (cartel o texto de arriba) y <strong>acepta entrar en el programa</strong></span></label>
+      <label className="check"><input type="checkbox" checked={f.marketingConsent} onChange={(e) => setF({ ...f, marketingConsent: e.target.checked })} /> <span>Acepta recibir comunicaciones comerciales (opcional)</span></label>
       <ErrorText error={error} />
-      <button className="btn primary block" disabled={busy || !f.name.trim()} onClick={() => run(async () => onDone(await api('/api/loyalty/customers', { body: f })))}>Guardar ficha</button>
+      <button className="btn primary block" disabled={busy || !f.name.trim() || !f.privacyAccepted} onClick={() => run(async () => onDone(await api('/api/loyalty/customers', { body: f })))}>Guardar ficha</button>
     </Modal>
   );
 }

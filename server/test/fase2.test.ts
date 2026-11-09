@@ -152,9 +152,9 @@ describe('reservas', () => {
   it('formulario público: crea una solicitud, no una reserva confirmada, y respeta los turnos', async () => {
     const info = (await app.inject({ method: 'GET', url: '/api/public/booking/demo' })).json();
     expect(info.lunch.start).toBe('13:00');
-    const out = await app.inject({ method: 'POST', url: '/api/public/booking/demo', payload: { name: 'Laura', phone: '600000000', partySize: 2, date: tomorrow(), time: '18:00' } });
+    const out = await app.inject({ method: 'POST', url: '/api/public/booking/demo', payload: { acceptPrivacy: true, name: 'Laura', phone: '600000000', partySize: 2, date: tomorrow(), time: '18:00' } });
     expect(out.statusCode).toBe(400);
-    const ok = await app.inject({ method: 'POST', url: '/api/public/booking/demo', payload: { name: 'Laura', phone: '600000000', partySize: 2, date: tomorrow(), time: '21:00' } });
+    const ok = await app.inject({ method: 'POST', url: '/api/public/booking/demo', payload: { acceptPrivacy: true, name: 'Laura', phone: '600000000', partySize: 2, date: tomorrow(), time: '21:00' } });
     expect(ok.json().status).toBe('requested');
   });
 

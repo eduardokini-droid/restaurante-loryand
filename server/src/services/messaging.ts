@@ -121,7 +121,7 @@ export async function sendDueReminders(): Promise<number> {
     from reservations r
     join establishments e on e.id = r.establishment_id and e.active
     join integrations i on i.establishment_id = r.establishment_id and i.kind = 'whatsapp' and i.enabled
-    where r.status = 'confirmed' and r.reminder_sent_at is null and r.phone <> ''
+    where r.status = 'confirmed' and r.reminder_sent_at is null and r.phone <> '' and r.whatsapp_consent
       and r.starts_at > now() + interval '30 minutes'
       and r.starts_at <= now() + make_interval(hours => coalesce((i.config->'events'->>'reminderHours')::int, 3))`;
   let sent = 0;

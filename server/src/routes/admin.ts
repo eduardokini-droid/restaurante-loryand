@@ -35,6 +35,13 @@ const establishmentSchema = z.object({
     blockPaymentUntilDelivered: z.boolean(),
     labelTagline: z.string().max(48),
   }).partial(),
+  privacy: z.object({
+    contactEmail: z.string().trim().max(120).refine((v) => v === '' || /^\S+@\S+\.\S+$/.test(v), 'Correo no válido'),
+    registry: z.string().trim().max(200),
+    reservationMonths: z.number().int().min(1).max(60),
+    waitlistDays: z.number().int().min(1).max(365),
+    messageLogMonths: z.number().int().min(1).max(60),
+  }).partial(),
 }).partial();
 
 const productSchema = z.object({
@@ -114,6 +121,7 @@ export default async function adminRoutes(app: FastifyInstance) {
     await sql.begin(async (tx) => {
       if (Object.keys(cols).length) await tx`update establishments set ${tx(cols)} where id = ${est}`;
       if (b.settings) await tx`update establishments set settings = settings || ${tx.json(b.settings)} where id = ${est}`;
+      if (b.privacy) await tx`update establishments set privacy = privacy || ${tx.json(b.privacy)} where id = ${est}`;
       await audit(tx, est, actorLabel(a), 'establishment.update', b);
     });
     notify(est, ['tables', 'waiters']);

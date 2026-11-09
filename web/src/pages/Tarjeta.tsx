@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import QRCode from 'qrcode';
 import { api } from '../lib/api';
 import { money } from '../lib/format';
+import { LegalLinks } from './Legal';
 
 /** Tarjeta digital del cliente: puntos y cupones disponibles. */
 export default function Tarjeta() {
@@ -10,12 +11,20 @@ export default function Tarjeta() {
   const [d, setD] = useState<any>(null);
   const [qrs, setQrs] = useState<Record<string, string>>({});
   const [err, setErr] = useState(false);
+  const [gone, setGone] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const setMarketing = async (consent: boolean) => { setBusy(true); try { await api(`/api/public/card/${token}/marketing`, { body: { consent } }); setD({ ...d, marketingConsent: consent }); } finally { setBusy(false); } };
+  const erase = async () => {
+    if (!confirm('Se borrarán tu ficha, tus puntos y tus cupones, y esta tarjeta dejará de funcionar. ¿Darte de baja?')) return;
+    setBusy(true); try { await api(`/api/public/card/${token}/erase`, { body: {} }); setGone(true); } finally { setBusy(false); }
+  };
   useEffect(() => {
     api(`/api/public/card/${token}`).then(async (x) => {
       setD(x);
       setQrs(Object.fromEntries(await Promise.all(x.coupons.map(async (k: any) => [k.code, await QRCode.toDataURL(k.code, { width: 200, margin: 1 })]))));
     }).catch(() => setErr(true));
   }, [token]);
+  if (gone) return <div className="center-page"><div className="card login"><h2>Te has dado de baja</h2><p>Hemos borrado tus datos del programa de fidelización. Gracias por habernos acompañado.</p></div></div>;
   if (err) return <div className="center-page"><div className="card login"><h2>Tarjeta no encontrada</h2></div></div>;
   if (!d) return <p className="muted" style={{ padding: '2rem' }}>Cargando…</p>;
   return (
@@ -34,6 +43,12 @@ export default function Tarjeta() {
           </div>
         ))}
         <p className="small muted">Enseña el código al personal al pagar.</p>
+        <div className="card">
+          <h3>Tus datos</h3>
+          <label className="check"><input type="checkbox" checked={!!d.marketingConsent} disabled={busy} onChange={(e) => setMarketing(e.target.checked)} /> <span>Quiero recibir ofertas de {d.establishment}</span></label>
+          <button className="btn small ghost danger" disabled={busy} onClick={erase}>Darme de baja del programa y borrar mis datos</button>
+        </div>
+        <LegalLinks slug={d.slug} />
       </div>
     </div>
   );

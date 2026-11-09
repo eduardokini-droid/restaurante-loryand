@@ -6,9 +6,10 @@ import { useLive } from '../lib/realtime';
 import { ErrorText, Modal, useAction } from '../components/ui';
 import { MenuChooser, type DailyMenu } from '../components/OrderBuilder';
 import { LANGS, allergenName, t as tt, trCategory, trProduct, type Lang } from '../lib/i18n';
+import { LegalLinks } from './Legal';
 
 interface P { id: string; name: string; description: string; price_cents: number; options: string[]; allergens: string[]; category_id: string | null; subcategory_id: string | null; photo_url: string | null; translations?: Record<string, { name?: string; description?: string }> }
-interface Data { establishment: string; table: { label: string; accessOpen: boolean }; categories: { id: string; parent_id: string | null; name: string; translations?: Record<string, string> }[]; products: P[]; dailyMenu: DailyMenu | null; onlinePayment?: boolean }
+interface Data { establishment: string; slug?: string; table: { label: string; accessOpen: boolean }; categories: { id: string; parent_id: string | null; name: string; translations?: Record<string, string> }[]; products: P[]; dailyMenu: DailyMenu | null; onlinePayment?: boolean }
 interface Line { key: string; p: P; option: string | null; qty: number; menu?: Record<string, string> }
 
 /** Carta digital del cliente: se abre con el QR o NFC de la mesa. */
@@ -194,6 +195,8 @@ export default function ClientMenu() {
           <button className="btn primary block" disabled={busy} onClick={send}>{busy ? '…' : tt('send', lang)}</button>
         </Modal>
       )}
+
+      {view === 'menu' && <div style={{ paddingBottom: count > 0 ? '4.5rem' : 0 }}><LegalLinks slug={data.slug} /></div>}
 
       {askCode && (
         <Modal title="Clave de la mesa" onClose={() => setAskCode(null)}>

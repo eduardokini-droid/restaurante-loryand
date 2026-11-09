@@ -113,7 +113,7 @@ export function Waitlist() {
 }
 
 function AddGroup({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
-  const [f, setF] = useState({ name: '', partySize: 2, phone: '', zonePref: '' });
+  const [f, setF] = useState({ name: '', partySize: 2, phone: '', zonePref: '', whatsappConsent: false });
   const { busy, error, run } = useAction();
   const save = () => run(async () => { await api('/api/waitlist', { body: { ...f, zonePref: f.zonePref || null } }); onDone(); });
   return (
@@ -121,6 +121,10 @@ function AddGroup({ onClose, onDone }: { onClose: () => void; onDone: () => void
       <label>Nombre<input autoFocus value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></label>
       <label>Comensales<input type="number" min={1} value={f.partySize} onChange={(e) => setF({ ...f, partySize: Number(e.target.value) })} /></label>
       <label>Teléfono (opcional)<input value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} /></label>
+      {f.phone.trim() && <>
+        <label className="check"><input type="checkbox" checked={f.whatsappConsent} onChange={(e) => setF({ ...f, whatsappConsent: e.target.checked })} /> <span>El cliente acepta recibir avisos por WhatsApp</span></label>
+        <p className="small muted" style={{ marginTop: '-.3rem' }}>Pregúntale: «¿Te mandamos el aviso por WhatsApp?». Si dice que no, se le avisa por teléfono. El teléfono se borra a los pocos días.</p>
+      </>}
       <label>Zona preferida<select value={f.zonePref} onChange={(e) => setF({ ...f, zonePref: e.target.value })}>
         <option value="">Cualquiera</option>{Object.entries(ZONE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
       <ErrorText error={error} />

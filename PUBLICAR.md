@@ -140,3 +140,12 @@ Los administradores y el resto de usuarios pueden activarla si quieren en **Mi c
 Cada usuario guarda su correo en **Mi cuenta**.
 
 **Último recurso del gestor** (contraseña olvidada **y** móvil perdido, sin códigos de emergencia): en Render añade `GESTOR_RECOVERY` con la fecha de hoy (`AAAA-MM-DD`) y reinicia el servicio. La contraseña del gestor pasa a ser la de `BOOTSTRAP_ADMIN_PASSWORD` y se quita la doble verificación (se pedirá activarla otra vez al entrar). Solo actúa ese día y una vez. **Después, borra la variable.**
+
+## 12. Protección de datos (RGPD)
+
+1. En **Datos del negocio** rellena razón social, NIF, dirección completa y correo. Mientras falte algo, el panel lo avisa.
+2. En la tarjeta **Protección de datos** puedes poner un correo específico para los derechos de los clientes, el Registro Mercantil (si es una sociedad) y los plazos de conservación (por defecto: reservas 12 meses, lista de espera 30 días, avisos de WhatsApp 12 meses).
+3. Pulsa **Ver textos legales** y revísalos con tu asesor: son modelos orientativos.
+4. Imprime el **Cartel informativo** y ponlo junto a la caja: sirve para informar a quien se apunta a la fidelización o a la lista de espera.
+
+Desde ahora, los avisos por WhatsApp solo se envían a quien lo ha aceptado (casilla en la reserva web, o el personal la marca al tomar la reserva o apuntar en la lista de espera tras preguntarle). A los demás se les avisa por teléfono.

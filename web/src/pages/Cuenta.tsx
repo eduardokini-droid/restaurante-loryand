@@ -56,13 +56,13 @@ function TwoFactor({ acc, reload, onEnabled }: { acc: Account; reload: () => voi
   });
 
   if (codes) return (
-    <div className="card">
+    <div className="card printable">
       <h3>Guarda tus códigos de emergencia</h3>
       <p className="small">Sirven para entrar si pierdes o cambias de móvil. <strong>Cada uno vale una sola vez</strong> y no se volverán a mostrar. Imprímelos o guárdalos en un sitio seguro, fuera del móvil.</p>
       <div className="recovery-codes" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, max-content)', gap: '.4rem 2rem', fontFamily: 'ui-monospace, monospace', fontSize: '1.15rem', margin: '1rem 0' }}>
         {codes.map((c) => <span key={c}>{c}</span>)}
       </div>
-      <div className="row">
+      <div className="row no-print">
         <button className="btn" onClick={() => navigator.clipboard?.writeText(codes.join('\n')).then(() => toast('Copiados'))}>Copiar</button>
         <button className="btn" onClick={() => window.print()}>Imprimir</button>
         <button className="btn primary" onClick={() => { setCodes(null); onEnabled?.(); }}>Ya los he guardado</button>

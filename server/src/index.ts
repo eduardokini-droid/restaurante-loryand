@@ -10,6 +10,7 @@ import { saveBackup } from './services/backups.js';
 import { retryPendingUploads, uploadBackup } from './services/offsite.js';
 import { autoCloseForgotten } from './services/timesheet.js';
 import { sendDueReminders } from './services/messaging.js';
+import { applyRetention } from './services/legal.js';
 
 const applied = await migrate();
 if (applied.length) console.log('Migraciones aplicadas:', applied.join(', '));
@@ -62,3 +63,7 @@ setInterval(() => { autoCloseForgotten().catch((err) => app.log.error({ err }, '
 // Recordatorios de reserva por WhatsApp (modo automático), cada 10 minutos.
 setInterval(() => { sendDueReminders().catch((err) => app.log.error({ err }, 'Error en recordatorios')); }, 600_000);
 setInterval(dailyBackups, 3600_000);
+// Plazos de conservación de datos personales (reservas, lista de espera, registro de avisos).
+const retention = () => applyRetention().then((n) => { if (n.reservations + n.waitlist + n.messages) app.log.info(n, 'Datos personales caducados anonimizados'); }).catch((err) => app.log.error({ err }, 'Error en la conservación de datos'));
+setTimeout(retention, 60_000);
+setInterval(retention, 6 * 3600_000);

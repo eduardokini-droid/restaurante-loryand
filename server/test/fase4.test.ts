@@ -199,7 +199,7 @@ describe('WhatsApp', () => {
   it('modo enlace: al confirmar una reserva prepara el mensaje de WhatsApp', async () => {
     await call(admin, 'PUT', '/api/integrations/whatsapp', { enabled: true, provider: 'link', templates: { reservation_confirmed: 'a', reservation_reminder: 'b', waitlist_ready: 'c' }, events: { reservationConfirmed: true, reservationReminder: true, reminderHours: 3, waitlistReady: true } });
     const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
-    const r = (await call(admin, 'POST', '/api/reservations', { name: 'Laura', phone: '600 123 123', partySize: 4, date: tomorrow, time: '21:00' })).json();
+    const r = (await call(admin, 'POST', '/api/reservations', { whatsappConsent: true, name: 'Laura', phone: '600 123 123', partySize: 4, date: tomorrow, time: '21:00' })).json();
     expect(r.message.status).toBe('manual');
     expect(r.message.link).toMatch(/^https:\/\/wa\.me\/34600123123\?text=Hola%20Laura/);
     expect(decodeURIComponent(r.message.link)).toContain('21:00');
@@ -217,7 +217,7 @@ describe('WhatsApp', () => {
     await call(admin, 'PUT', '/api/integrations/whatsapp', { enabled: true, provider: 'meta', phoneNumberId: '1234567890', token: 'EAAB-token-de-prueba-123456',
       templates: { reservation_confirmed: 'reserva_confirmada', reservation_reminder: 'recordatorio_reserva', waitlist_ready: 'mesa_lista' },
       events: { reservationConfirmed: true, reservationReminder: true, reminderHours: 3, waitlistReady: true } });
-    const g = (await call(waiter, 'POST', '/api/waitlist', { name: 'Pedro', partySize: 2, phone: '611222333' })).json();
+    const g = (await call(waiter, 'POST', '/api/waitlist', { name: 'Pedro', partySize: 2, phone: '611222333', whatsappConsent: true })).json();
     const a = (await call(waiter, 'POST', `/api/waitlist/${g.id}/assign`, { tableIds: [tableId] })).json();
     expect(a.message.status).toBe('sent');
     expect(sent[0].url).toBe('https://graph.facebook.com/v21.0/1234567890/messages');
@@ -238,8 +238,9 @@ describe('WhatsApp', () => {
       events: { reservationConfirmed: false, reservationReminder: true, reminderHours: 3, waitlistReady: true } });
     const soon = new Date(Date.now() + 2 * 3600_000);
     const later = new Date(Date.now() + 10 * 3600_000);
-    await sql`insert into reservations (establishment_id, name, phone, party_size, starts_at, status) values
-      (${est}, 'Pronto', '600111111', 2, ${soon}, 'confirmed'), (${est}, 'Tarde', '600222222', 2, ${later}, 'confirmed'), (${est}, 'Solicitud', '600333333', 2, ${soon}, 'requested')`;
+    await sql`insert into reservations (establishment_id, name, phone, party_size, starts_at, status, whatsapp_consent) values
+      (${est}, 'Pronto', '600111111', 2, ${soon}, 'confirmed', true), (${est}, 'Tarde', '600222222', 2, ${later}, 'confirmed', true),
+      (${est}, 'Solicitud', '600333333', 2, ${soon}, 'requested', true), (${est}, 'Sin permiso', '600444444', 2, ${soon}, 'confirmed', false)`;
     expect(await sendDueReminders()).toBe(1);
     expect(await sendDueReminders()).toBe(0);
     expect(sent).toEqual(['recordatorio_reserva']);

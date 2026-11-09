@@ -43,7 +43,7 @@ export default function Reservas() {
         <h1>Reservas</h1>
         <span className="row">
           <button className="btn" onClick={() => setSettings(true)}>Turnos y política</button>
-          <button className="btn primary" onClick={() => setForm({ name: '', phone: '', partySize: 2, date, time: '21:00', notes: '', zonePref: '', tableIds: [] })}>+ Nueva reserva</button>
+          <button className="btn primary" onClick={() => setForm({ name: '', phone: '', partySize: 2, date, time: '21:00', notes: '', zonePref: '', tableIds: [], whatsappConsent: false })}>+ Nueva reserva</button>
         </span>
       </div>
       <div className="card row">
@@ -63,7 +63,7 @@ export default function Reservas() {
             <tbody>{list.map((r) => (
               <tr key={r.id} style={['cancelled', 'no_show', 'finished'].includes(r.status) ? { opacity: .55 } : undefined}>
                 <td><strong>{r.time}</strong>{r.overdue && <div className="badge danger">Pasado el margen</div>}</td>
-                <td>{r.name}<div className="small muted">{r.phone}{r.source === 'public' && ' · web'}</div>{r.notes && <div className="small">{r.notes}</div>}</td>
+                <td>{r.name}<div className="small muted">{r.phone}{r.source === 'public' && ' · web'}{r.whatsapp_consent && ' · WhatsApp'}</div>{r.notes && <div className="small">{r.notes}</div>}</td>
                 <td>{r.party_size}{r.zone_pref && <div className="small muted">{ZONE_LABEL[r.zone_pref]}</div>}</td>
                 <td>
                   <select style={{ minWidth: 110 }} value={r.table_ids[0] ?? ''} disabled={busy || ['finished', 'cancelled', 'no_show'].includes(r.status)}
@@ -111,6 +111,7 @@ function ReservationForm({ initial, tables, onClose, onDone }: { initial: any; t
       <div className="grid cols-2" style={{ gridTemplateColumns: '1fr 1fr' }}>
         <label>Nombre<input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></label>
         <label>Teléfono<input value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} /></label>
+        {f.phone.trim() && <label className="check" title="Pregúntale: «¿Te mandamos el aviso por WhatsApp?». Si dice que no, se le avisa por teléfono."><input type="checkbox" checked={!!f.whatsappConsent} onChange={(e) => setF({ ...f, whatsappConsent: e.target.checked })} /> <span>El cliente acepta recibir avisos por WhatsApp</span></label>}
         <label>Fecha<input type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></label>
         <label>Hora<input type="time" value={f.time} onChange={(e) => setF({ ...f, time: e.target.value })} /></label>
         <label>Comensales<input type="number" min={1} value={f.partySize} onChange={(e) => setF({ ...f, partySize: Number(e.target.value) })} /></label>

@@ -1,13 +1,14 @@
 import type { FastifyInstance } from 'fastify';
 import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
-import { sql } from '../db.js';
+import { sql, type Tx } from '../db.js';
 import { actorLabel, establishmentOf, requireModule, requireService } from '../auth.js';
 import { badRequest, conflict, notFound } from '../errors.js';
 import { parse } from '../validate.js';
 import { notify } from '../realtime.js';
 import { audit } from '../services/audit.js';
 import { accountSummary } from '../services/accounts.js';
+import { logConsent } from '../services/legal.js';
 
 const id = z.object({ id: z.string().uuid() });
 const customerSchema = z.object({
@@ -16,6 +17,8 @@ const customerSchema = z.object({
   email: z.string().max(120).default(''),
   notes: z.string().max(500).default(''),
   marketingConsent: z.boolean().default(false),
+  // El personal confirma que ha informado al cliente (cartel o tarjeta) y que este acepta entrar en el programa.
+  privacyAccepted: z.literal(true, { error: 'Confirma que el cliente ha sido informado y acepta el programa' }),
 });
 const couponCode = () => randomBytes(4).toString('hex').toUpperCase();
 
@@ -46,14 +49,19 @@ export default async function loyaltyRoutes(app: FastifyInstance) {
       const [dup] = await sql`select name from customers where establishment_id = ${est} and phone = ${b.phone}`;
       if (dup) throw conflict('duplicate', `Ese teléfono ya pertenece a ${dup.name}. Búscalo en lugar de crear otra ficha.`);
     }
-    const [c] = await sql`insert into customers (establishment_id, name, phone, email, notes, marketing_consent)
-                          values (${est}, ${b.name}, ${b.phone}, ${b.email}, ${b.notes}, ${b.marketingConsent}) returning *`;
-    await sql.begin((tx) => audit(tx, est, actorLabel(a), 'customer.create', { id: c.id }));
-    return c;
+    return sql.begin(async (tx) => {
+      const [c] = await tx`insert into customers (establishment_id, name, phone, email, notes, marketing_consent, privacy_accepted_at)
+                           values (${est}, ${b.name}, ${b.phone}, ${b.email}, ${b.notes}, ${b.marketingConsent}, now()) returning *`;
+      const base = { establishmentId: est, kind: 'customer' as const, subjectId: c.id, source: 'staff' as const, actor: actorLabel(a) };
+      await logConsent(tx, { ...base, purpose: 'privacy', granted: true });
+      if (b.marketingConsent) await logConsent(tx, { ...base, purpose: 'marketing', granted: true });
+      await audit(tx, est, actorLabel(a), 'customer.create', { id: c.id });
+      return c;
+    });
   });
 
   app.patch('/api/loyalty/customers/:id', async (req) => {
-    requireModule(req, 'loyalty');
+    const a = requireModule(req, 'loyalty');
     const est = establishmentOf(req);
     const { id: cid } = parse(id, req.params);
     const b = parse(z.object({
@@ -64,9 +72,45 @@ export default async function loyaltyRoutes(app: FastifyInstance) {
     for (const [k, c] of Object.entries({ name: 'name', phone: 'phone', email: 'email', notes: 'notes', marketingConsent: 'marketing_consent', points: 'points' })) {
       if (b[k as keyof typeof b] !== undefined) cols[c] = b[k as keyof typeof b];
     }
-    const [c] = await sql`update customers set ${sql(cols)} where id = ${cid} and establishment_id = ${est} returning *`;
+    return sql.begin(async (tx) => {
+      const [cur] = await tx`select marketing_consent from customers where id = ${cid} and establishment_id = ${est} for update`;
+      if (!cur) throw notFound('Cliente');
+      const [c] = Object.keys(cols).length ? await tx`update customers set ${tx(cols)} where id = ${cid} returning *` : await tx`select * from customers where id = ${cid}`;
+      if (b.marketingConsent !== undefined && b.marketingConsent !== cur.marketing_consent) {
+        await logConsent(tx, { establishmentId: est, kind: 'customer', subjectId: cid, purpose: 'marketing', granted: b.marketingConsent, source: 'staff', actor: actorLabel(a) });
+      }
+      return c;
+    });
+  });
+
+  /** Derecho de acceso y portabilidad (arts. 15 y 20 RGPD): todos los datos del cliente en un archivo. */
+  app.get('/api/loyalty/customers/:id/export', async (req, reply) => {
+    const a = requireModule(req, 'loyalty');
+    const est = establishmentOf(req);
+    const { id: cid } = parse(id, req.params);
+    const [c] = await sql`select id, name, phone, email, notes, points, marketing_consent, privacy_accepted_at, created_at from customers where id = ${cid} and establishment_id = ${est}`;
     if (!c) throw notFound('Cliente');
-    return c;
+    const visits = await sql`select a.closed_at as fecha, (select coalesce(sum(p.amount_cents), 0)::int from payments p where p.account_id = a.id) as importe_centimos
+                             from accounts a where a.customer_id = ${cid} and a.status = 'paid' order by a.closed_at`;
+    const coupons = await sql`select code, description, kind, value, valid_until, uses, active, created_at from coupons where customer_id = ${cid} order by created_at`;
+    const consents = await sql`select purpose, granted, text_version, source, created_at from consent_log where subject_kind = 'customer' and subject_id = ${cid} order by created_at`;
+    const [e] = await sql`select name, legal_name from establishments where id = ${est}`;
+    await sql.begin((tx) => audit(tx, est, actorLabel(a), 'customer.export', { id: cid }));
+    reply.header('content-disposition', `attachment; filename="datos-cliente-${cid.slice(0, 8)}.json"`);
+    return { responsable: e.legal_name || e.name, generado: new Date().toISOString(), cliente: c, visitas: visits, cupones: coupons, consentimientos: consents };
+  });
+
+  /** Derecho de supresión (art. 17 RGPD). Las cuentas cobradas se conservan por obligación fiscal, pero sin vínculo con la persona. */
+  app.post('/api/loyalty/customers/:id/erase', async (req) => {
+    const a = requireModule(req, 'loyalty');
+    const est = establishmentOf(req);
+    const { id: cid } = parse(id, req.params);
+    await sql.begin(async (tx) => {
+      const [c] = await tx`select id from customers where id = ${cid} and establishment_id = ${est} for update`;
+      if (!c) throw notFound('Cliente');
+      await eraseCustomer(tx, est, cid, actorLabel(a), 'staff');
+    });
+    return { ok: true };
   });
 
   // ---------- Cupones ----------
@@ -191,12 +235,42 @@ export default async function loyaltyRoutes(app: FastifyInstance) {
   // ---------- Tarjeta digital pública ----------
   app.get('/api/public/card/:token', async (req) => {
     const { token } = parse(z.object({ token: z.string().regex(/^[a-f0-9]{24}$/) }), req.params);
-    const [c] = await sql`select c.id, c.name, c.points, e.name as establishment from customers c join establishments e on e.id = c.establishment_id
+    const [c] = await sql`select c.id, c.name, c.points, c.marketing_consent, e.name as establishment, e.slug from customers c join establishments e on e.id = c.establishment_id
                           where c.card_token = ${token} and e.active`;
     if (!c) throw notFound('Tarjeta');
     const coupons = await sql`select code, description, kind, value, valid_until from coupons
                               where customer_id = ${c.id} and active and (max_uses is null or uses < max_uses)
                                 and (valid_until is null or valid_until >= current_date) order by created_at desc`;
-    return { establishment: c.establishment, name: c.name.split(' ')[0], points: c.points, coupons };
+    return { establishment: c.establishment, slug: c.slug, name: c.name.split(' ')[0], points: c.points, marketingConsent: c.marketing_consent, coupons };
   });
+
+  /** Desde su tarjeta, el cliente deja de recibir ofertas o se da de baja del programa (sus datos se suprimen). */
+  app.post('/api/public/card/:token/marketing', async (req) => {
+    const { token } = parse(z.object({ token: z.string().regex(/^[a-f0-9]{24}$/) }), req.params);
+    const { consent } = parse(z.object({ consent: z.boolean() }), req.body);
+    await sql.begin(async (tx) => {
+      const [c] = await tx`update customers set marketing_consent = ${consent} where card_token = ${token} returning id, establishment_id`;
+      if (!c) throw notFound('Tarjeta');
+      await logConsent(tx, { establishmentId: c.establishment_id, kind: 'customer', subjectId: c.id, purpose: 'marketing', granted: consent, source: 'card', ip: req.ip });
+    });
+    return { ok: true };
+  });
+
+  app.post('/api/public/card/:token/erase', async (req) => {
+    const { token } = parse(z.object({ token: z.string().regex(/^[a-f0-9]{24}$/) }), req.params);
+    await sql.begin(async (tx) => {
+      const [c] = await tx`select id, establishment_id from customers where card_token = ${token} for update`;
+      if (!c) throw notFound('Tarjeta');
+      await eraseCustomer(tx, c.establishment_id, c.id, 'cliente', 'card', req.ip);
+    });
+    return { ok: true };
+  });
+}
+
+/** Suprime la ficha: se desvinculan las cuentas (que se conservan por ley), se borran sus cupones y la ficha. Queda constancia sin datos personales. */
+async function eraseCustomer(tx: Tx, est: string, cid: string, actor: string, source: 'staff' | 'card', ip?: string) {
+  await tx`update accounts set customer_id = null where customer_id = ${cid}`;
+  await tx`delete from customers where id = ${cid}`; // los cupones personales se borran en cascada
+  await logConsent(tx, { establishmentId: est, kind: 'customer', subjectId: cid, purpose: 'privacy', granted: false, source, actor, ip: ip ?? null });
+  await audit(tx, est, actor, 'customer.erase', { id: cid, source });
 }

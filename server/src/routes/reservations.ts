@@ -9,9 +9,11 @@ import { checkLimit, recordFailure } from '../ratelimit.js';
 import { audit } from '../services/audit.js';
 import { setPhysicalState } from '../services/tables.js';
 import { sendMessage, type SendResult } from '../services/messaging.js';
+import { legalTexts, logConsent } from '../services/legal.js';
 
 async function confirmationMessage(est: string, r: Record<string, any>): Promise<SendResult | null> {
-  if (!r.phone) return null;
+  // Solo por WhatsApp si el cliente lo ha aceptado; si no, el personal avisa por teléfono.
+  if (!r.phone || !r.whatsapp_consent) return null;
   const [x] = await sql`select e.name, to_char(${r.starts_at}::timestamptz at time zone ${TZ}, 'DD/MM') as date, to_char(${r.starts_at}::timestamptz at time zone ${TZ}, 'HH24:MI') as time from establishments e where e.id = ${est}`;
   return sendMessage(est, 'reservation_confirmed', r.phone, { name: r.name, establishment: x.name, party: r.party_size, date: x.date, time: x.time }, { reservationId: r.id });
 }
@@ -88,6 +90,7 @@ const createSchema = z.object({
   zonePref: z.enum(['salon', 'terraza', 'barra', 'reservado']).nullable().default(null),
   tableIds: z.array(z.string().uuid()).default([]),
   status: z.enum(['requested', 'confirmed']).default('confirmed'),
+  whatsappConsent: z.boolean().default(false),
 });
 
 const toStart = async (q: typeof sql | Tx, date: string, time: string) => {
@@ -139,10 +142,11 @@ export default async function reservationRoutes(app: FastifyInstance) {
       if (status === 'confirmed') await checkConflicts(tx, est, b.tableIds, startsAt, duration, null);
       const [row] = await tx`
         insert into reservations (establishment_id, name, phone, email, party_size, starts_at, duration_min, notes, zone_pref, table_ids,
-                                  status, deposit_cents, deposit_status, source)
+                                  status, deposit_cents, deposit_status, source, whatsapp_consent)
         values (${est}, ${b.name}, ${b.phone}, ${b.email}, ${b.partySize}, ${startsAt}, ${duration}, ${b.notes}, ${b.zonePref}, ${b.tableIds},
-                ${status}, ${deposit}, ${deposit > 0 ? 'pending' : 'none'}, 'staff')
+                ${status}, ${deposit}, ${deposit > 0 ? 'pending' : 'none'}, 'staff', ${b.whatsappConsent && !!b.phone})
         returning *`;
+      if (row.whatsapp_consent) await logConsent(tx, { establishmentId: est, kind: 'reservation', subjectId: row.id, purpose: 'whatsapp', granted: true, source: 'staff', actor: actorLabel(a) });
       await audit(tx, est, actorLabel(a), 'reservation.create', { id: row.id });
       return row;
     });
@@ -162,6 +166,7 @@ export default async function reservationRoutes(app: FastifyInstance) {
       partySize: z.number().int().min(1).max(100),
       date: z.string().date(), time: hhmm,
       notes: z.string().max(500), name: z.string().min(1).max(80), phone: z.string().max(30),
+      whatsappConsent: z.boolean(),
     }).partial(), req.body);
     const r = await sql.begin(async (tx) => {
       const [cur] = await tx`select * from reservations where id = ${id} and establishment_id = ${est} for update`;
@@ -182,8 +187,11 @@ export default async function reservationRoutes(app: FastifyInstance) {
       const [row] = await tx`
         update reservations set status = ${status}, table_ids = ${tableIds}, deposit_status = ${depositStatus}, starts_at = ${startsAt},
           party_size = ${b.partySize ?? cur.party_size}, notes = ${b.notes ?? cur.notes}, name = ${b.name ?? cur.name}, phone = ${b.phone ?? cur.phone},
-          updated_at = now()
+          whatsapp_consent = ${b.whatsappConsent ?? cur.whatsapp_consent}, updated_at = now()
         where id = ${id} returning *`;
+      if (b.whatsappConsent !== undefined && b.whatsappConsent !== cur.whatsapp_consent) {
+        await logConsent(tx, { establishmentId: est, kind: 'reservation', subjectId: id, purpose: 'whatsapp', granted: b.whatsappConsent, source: 'staff', actor: actorLabel(a) });
+      }
       if (status === 'seated' && cur.status !== 'seated') {
         for (const t of tableIds) await setPhysicalState(tx, t, 'occupied');
       }
@@ -202,7 +210,10 @@ export default async function reservationRoutes(app: FastifyInstance) {
     if (!e) throw notFound('Establecimiento');
     const s = await settingsOf(sql, e.id);
     if (!s.publicEnabled) throw new AppError(403, 'booking_closed', 'Este establecimiento no acepta reservas en línea');
+    const legal = await legalTexts(sql, e.id);
+    const [wa] = await sql`select 1 from integrations where establishment_id = ${e.id} and kind = 'whatsapp' and enabled`;
     return {
+      privacyNotice: legal.layers.reservation, whatsappNotice: wa ? legal.layers.whatsapp : null,
       establishment: { name: e.name, address: e.address, city: e.city, phone: e.phone },
       lunch: s.lunch, dinner: s.dinner, cancellationPolicy: s.cancellationPolicy, maxParty: s.maxPartyOnline,
       depositPerPersonCents: s.depositPerPersonCents, depositFromParty: s.depositFromParty,
@@ -216,6 +227,8 @@ export default async function reservationRoutes(app: FastifyInstance) {
       name: z.string().min(2).max(80), phone: z.string().min(6).max(30), email: z.string().email().or(z.literal('')).default(''),
       partySize: z.number().int().min(1).max(100), date: z.string().date(), time: hhmm,
       notes: z.string().max(500).default(''), zonePref: z.enum(['salon', 'terraza']).nullable().default(null),
+      acceptPrivacy: z.literal(true, { error: 'Para reservar, acepta la política de privacidad' }),
+      whatsappConsent: z.boolean().default(false),
     }), req.body);
     const [e] = await sql`select id from establishments where slug = ${slug} and active`;
     if (!e) throw notFound('Establecimiento');
@@ -227,11 +240,18 @@ export default async function reservationRoutes(app: FastifyInstance) {
     if (startsAt.getTime() < Date.now() + 30 * 60_000) throw badRequest('Elige una hora con al menos 30 minutos de antelación');
     recordFailure(req, 'booking'); // cuenta cada envío para frenar abusos del formulario
     const deposit = depositFor(s, b.partySize);
-    const [r] = await sql`
-      insert into reservations (establishment_id, name, phone, email, party_size, starts_at, duration_min, notes, zone_pref, status, deposit_cents, deposit_status, source)
-      values (${e.id}, ${b.name}, ${b.phone}, ${b.email}, ${b.partySize}, ${startsAt}, ${s.durationMin}, ${b.notes}, ${b.zonePref}, 'requested',
-              ${deposit}, ${deposit > 0 ? 'pending' : 'none'}, 'public')
-      returning id`;
+    const r = await sql.begin(async (tx) => {
+      const [row] = await tx`
+        insert into reservations (establishment_id, name, phone, email, party_size, starts_at, duration_min, notes, zone_pref, status, deposit_cents, deposit_status, source,
+                                  privacy_accepted_at, whatsapp_consent)
+        values (${e.id}, ${b.name}, ${b.phone}, ${b.email}, ${b.partySize}, ${startsAt}, ${s.durationMin}, ${b.notes}, ${b.zonePref}, 'requested',
+                ${deposit}, ${deposit > 0 ? 'pending' : 'none'}, 'public', now(), ${b.whatsappConsent})
+        returning id`;
+      const base = { establishmentId: e.id, kind: 'reservation' as const, subjectId: row.id, source: 'public' as const, ip: req.ip };
+      await logConsent(tx, { ...base, purpose: 'privacy', granted: true });
+      if (b.whatsappConsent) await logConsent(tx, { ...base, purpose: 'whatsapp', granted: true });
+      return row;
+    });
     notify(e.id, ['tables']);
     // Una solicitud no es una reserva confirmada: el local la revisa y la confirma.
     return { id: r.id, status: 'requested', depositCents: deposit };

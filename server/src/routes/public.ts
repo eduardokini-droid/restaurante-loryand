@@ -8,17 +8,18 @@ import { checkLimit, recordFailure } from '../ratelimit.js';
 import { createOrder, orderInput } from '../services/orders.js';
 import { accountSummary } from '../services/accounts.js';
 import { printOrder } from '../services/printing.js';
+import { legalTexts } from '../services/legal.js';
 
 const token = z.object({ token: z.string().min(10).max(64) });
 
 interface PublicTable {
   id: string; label: string; access_code: string; access_open: boolean; establishment_id: string;
-  qr_token: string; establishment_name: string; active: boolean;
+  qr_token: string; establishment_name: string; establishment_slug: string; active: boolean;
 }
 
 async function tableByToken(t: string): Promise<PublicTable> {
   const [row] = await sql<PublicTable[]>`
-    select t.id, t.label, t.access_code, t.access_open, t.establishment_id, t.qr_token, e.name as establishment_name, e.active
+    select t.id, t.label, t.access_code, t.access_open, t.establishment_id, t.qr_token, e.name as establishment_name, e.slug as establishment_slug, e.active
     from tables t join establishments e on e.id = t.establishment_id
     where t.qr_token = ${t} and t.active`;
   if (!row || !row.active) throw notFound('Mesa');
@@ -37,6 +38,14 @@ function checkCode(req: FastifyRequest, table: { access_open: boolean; access_co
 }
 
 export default async function publicRoutes(app: FastifyInstance) {
+  /** Política de privacidad, aviso legal y cookies del local, con sus datos. */
+  app.get('/api/public/legal/:slug', async (req) => {
+    const { slug } = parse(z.object({ slug: z.string().min(1).max(40) }), req.params);
+    const [e] = await sql`select id from establishments where slug = ${slug} and active`;
+    if (!e) throw notFound('Establecimiento');
+    return legalTexts(sql, e.id);
+  });
+
   app.get('/api/public/table/:token', async (req) => {
     const { token: tk } = parse(token, req.params);
     const t = await tableByToken(tk);
@@ -46,7 +55,7 @@ export default async function publicRoutes(app: FastifyInstance) {
       from products where establishment_id = ${t.establishment_id} and visible and not archived order by name`;
     const [dailyMenu] = await sql`select name, price_cents, sections from daily_menus where establishment_id = ${t.establishment_id} and active`;
     const [pay] = await sql`select 1 from integrations where establishment_id = ${t.establishment_id} and kind = 'redsys' and enabled and secret_enc is not null`;
-    return { establishment: t.establishment_name, table: { label: t.label, accessOpen: t.access_open }, categories, products, dailyMenu: dailyMenu ?? null, onlinePayment: !!pay };
+    return { establishment: t.establishment_name, slug: t.establishment_slug, table: { label: t.label, accessOpen: t.access_open }, categories, products, dailyMenu: dailyMenu ?? null, onlinePayment: !!pay };
   });
 
   app.post('/api/public/table/:token/verify', async (req) => {

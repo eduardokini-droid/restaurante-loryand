@@ -35,6 +35,7 @@ const OUT = process.argv[2];
   await cli.fill('input[autocomplete=name]', 'Marta Sanz');
   await cli.fill('input[autocomplete=tel]', '600123123');
   await cli.screenshot({ path: `${OUT}/f2-2-reservar.png`, fullPage: true });
+  await cli.check('label:has-text("política de privacidad") input');
   await cli.click('button:has-text("Solicitar reserva")');
   await cli.waitForSelector('text=Todavía no está confirmada');
   await admin.click('a:has-text("Reservas")');

@@ -9,6 +9,7 @@ import { audit } from '../services/audit.js';
 import { setPhysicalState } from '../services/tables.js';
 import { averageStay, loadUnits, propose, type WaitGroup } from '../services/waitlist.js';
 import { sendMessage } from '../services/messaging.js';
+import { logConsent } from '../services/legal.js';
 
 /** La lista de espera se usa desde el plano, las reservas y la PDA. */
 function requireWaitlist(req: FastifyRequest): Actor {
@@ -51,10 +52,15 @@ export default async function waitlistRoutes(app: FastifyInstance) {
     const b = parse(z.object({
       name: z.string().min(1).max(60), partySize: z.number().int().min(1).max(100),
       phone: z.string().max(30).default(''), zonePref: z.enum(['salon', 'terraza', 'barra', 'reservado']).nullable().default(null),
+      whatsappConsent: z.boolean().default(false),
     }), req.body);
-    const [g] = await sql`insert into waitlist (establishment_id, name, party_size, phone, zone_pref)
-                          values (${est}, ${b.name}, ${b.partySize}, ${b.phone}, ${b.zonePref}) returning *`;
-    await sql.begin((tx) => audit(tx, est, actorLabel(a), 'waitlist.add', { id: g.id }));
+    const g = await sql.begin(async (tx) => {
+      const [row] = await tx`insert into waitlist (establishment_id, name, party_size, phone, zone_pref, whatsapp_consent)
+                             values (${est}, ${b.name}, ${b.partySize}, ${b.phone}, ${b.zonePref}, ${b.whatsappConsent && !!b.phone}) returning *`;
+      if (row.whatsapp_consent) await logConsent(tx, { establishmentId: est, kind: 'waitlist', subjectId: row.id, purpose: 'whatsapp', granted: true, source: 'staff', actor: actorLabel(a) });
+      await audit(tx, est, actorLabel(a), 'waitlist.add', { id: row.id });
+      return row;
+    });
     notify(est, ['tables']);
     return g;
   });
@@ -67,7 +73,7 @@ export default async function waitlistRoutes(app: FastifyInstance) {
     const { tableIds } = parse(z.object({ tableIds: z.array(z.string().uuid()).min(1) }), req.body);
     const result = await sql.begin(async (tx) => {
       await tx`select id from establishments where id = ${est} for update`;
-      const [g] = await tx`select status, party_size, name, phone from waitlist where id = ${gid} and establishment_id = ${est} for update`;
+      const [g] = await tx`select status, party_size, name, phone, whatsapp_consent from waitlist where id = ${gid} and establishment_id = ${est} for update`;
       if (!g) throw notFound('Grupo');
       if (g.status !== 'waiting') throw conflict('not_waiting', 'Este grupo ya no está esperando');
       const units = await loadUnits(tx, est);
@@ -77,7 +83,7 @@ export default async function waitlistRoutes(app: FastifyInstance) {
       if (unit.seats < g.party_size) throw conflict('too_small', `La mesa tiene ${unit.seats} plazas y el grupo es de ${g.party_size}`);
       await tx`update waitlist set status = 'notified', table_ids = ${tableIds}, notified_at = now() where id = ${gid}`;
       await audit(tx, est, actorLabel(a), 'waitlist.assign', { id: gid, tableIds });
-      return { name: g.name as string, phone: g.phone as string, labels: unit.labels };
+      return { name: g.name as string, phone: g.whatsapp_consent ? g.phone as string : '', labels: unit.labels };
     }).then(async (x) => {
       notify(est, ['tables']);
       if (!x.phone) return { ok: true, message: null };

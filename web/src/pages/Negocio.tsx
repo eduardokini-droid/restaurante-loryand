@@ -10,15 +10,20 @@ const FIELDS: [string, string, string][] = [
 ];
 
 export default function Negocio() {
-  const { refresh } = useSession();
+  const { refresh, me } = useSession();
+  const [incomplete, setIncomplete] = useState<string[]>([]);
+  const slug = me?.establishment?.slug;
+  const checkLegal = () => { if (slug) api<any>(`/api/public/legal/${slug}`).then((t) => setIncomplete(t.incomplete)).catch(() => {}); };
+  useEffect(checkLegal, [slug]); // eslint-disable-line react-hooks/exhaustive-deps
   const [f, setF] = useState<Record<string, any> | null>(null);
   const { busy, error, run } = useAction();
   const toast = useToast();
   useEffect(() => {
-    api('/api/admin/establishment').then((e) => setF({ ...Object.fromEntries(FIELDS.map(([k, c]) => [k, e[c] ?? ''])), settings: e.settings })).catch(() => {});
+    api('/api/admin/establishment').then((e) => setF({ ...Object.fromEntries(FIELDS.map(([k, c]) => [k, e[c] ?? ''])), settings: e.settings, privacy: { contactEmail: '', registry: '', reservationMonths: 12, waitlistDays: 30, messageLogMonths: 12, ...e.privacy } })).catch(() => {});
   }, []);
   if (!f) return <p className="muted">Cargando…</p>;
-  const save = () => run(async () => { await api('/api/admin/establishment', { method: 'PUT', body: f }); await refresh(); toast('Datos del establecimiento guardados'); });
+  const save = () => run(async () => { await api('/api/admin/establishment', { method: 'PUT', body: f }); await refresh(); toast('Datos del establecimiento guardados'); checkLegal(); });
+  const priv = (k: string, v: string | number) => setF({ ...f, privacy: { ...f.privacy, [k]: v } });
   const setting = (k: string, v: boolean) => setF({ ...f, settings: { ...f.settings, [k]: v } });
   return (
     <div className="stack" style={{ maxWidth: 760 }}>
@@ -32,6 +37,22 @@ export default function Negocio() {
       <div className="card">
         <h3>Servicio</h3>
         <label className="check"><input type="checkbox" checked={!!f.settings.blockPaymentUntilDelivered} onChange={(e) => setting('blockPaymentUntilDelivered', e.target.checked)} /> No permitir cobrar con productos sin entregar</label>
+      </div>
+      <div className="card">
+        <h3>Protección de datos</h3>
+        <p className="small muted">Con estos datos se generan la política de privacidad, el aviso legal y la política de cookies que ven tus clientes en la carta, las reservas y la tarjeta. Son modelos orientativos: revísalos con tu asesor.</p>
+        {incomplete.length > 0 && <p className="notice">Faltan datos para que los textos legales estén completos: <strong>{incomplete.join(', ')}</strong>.</p>}
+        <div className="grid cols-2">
+          <label>Correo para ejercer los derechos (si no, el correo general)<input type="email" value={f.privacy.contactEmail} onChange={(e) => priv('contactEmail', e.target.value)} /></label>
+          <label>Registro Mercantil (solo sociedades)<input value={f.privacy.registry} placeholder="Inscrita en el R. M. de …, tomo …, folio …, hoja …" onChange={(e) => priv('registry', e.target.value)} /></label>
+          <label>Anonimizar reservas pasados (meses)<input type="number" min={1} max={60} value={f.privacy.reservationMonths} onChange={(e) => priv('reservationMonths', Number(e.target.value))} /></label>
+          <label>Borrar la lista de espera pasados (días)<input type="number" min={1} max={365} value={f.privacy.waitlistDays} onChange={(e) => priv('waitlistDays', Number(e.target.value))} /></label>
+          <label>Guardar el registro de avisos de WhatsApp (meses)<input type="number" min={1} max={60} value={f.privacy.messageLogMonths} onChange={(e) => priv('messageLogMonths', Number(e.target.value))} /></label>
+        </div>
+        {slug && <div className="row mt">
+          <a className="btn small" href={`/legal/${slug}`} target="_blank" rel="noreferrer">Ver textos legales</a>
+          <a className="btn small" href={`/legal/${slug}?cartel=1`} target="_blank" rel="noreferrer">Cartel informativo para imprimir</a>
+        </div>}
       </div>
       <ErrorText error={error} />
       <button className="btn primary" disabled={busy} onClick={save}>Guardar datos del establecimiento</button>

@@ -125,8 +125,8 @@ describe('escandallos, ventas y rentabilidad', () => {
 
 describe('fidelización y cupones', () => {
   it('cupón de cliente: descuento, IVA proporcional, puntos y un solo uso', async () => {
-    const c = (await call(waiter, 'POST', '/api/loyalty/customers', { name: 'Lucía Pérez', phone: '600 111 222' })).json();
-    expect((await call(waiter, 'POST', '/api/loyalty/customers', { name: 'Otra', phone: '600111222' })).statusCode).toBe(409);
+    const c = (await call(waiter, 'POST', '/api/loyalty/customers', { privacyAccepted: true, name: 'Lucía Pérez', phone: '600 111 222' })).json();
+    expect((await call(waiter, 'POST', '/api/loyalty/customers', { privacyAccepted: true, name: 'Otra', phone: '600111222' })).statusCode).toBe(409);
     const k = (await call(admin, 'POST', '/api/loyalty/coupons', { customerId: c.id, kind: 'percent', value: 10, maxUses: 1 })).json();
     const o = await order([{ productId: P.plato, qty: 2 }, { productId: P.camiseta, qty: 1 }]);
     const acc = (await call(waiter, 'POST', `/api/service/accounts/${o.accountId}/coupon`, { code: k.code.toLowerCase() })).json();
@@ -159,7 +159,7 @@ describe('fidelización y cupones', () => {
   });
 
   it('quitar un cupón devuelve su uso y la tarjeta digital muestra puntos y cupones', async () => {
-    const c = (await call(waiter, 'POST', '/api/loyalty/customers', { name: 'Mario Gil', phone: '611' })).json();
+    const c = (await call(waiter, 'POST', '/api/loyalty/customers', { privacyAccepted: true, name: 'Mario Gil', phone: '611' })).json();
     const k = (await call(admin, 'POST', '/api/loyalty/coupons', { customerId: c.id, kind: 'amount', value: 200, description: 'Café gratis' })).json();
     const o = await order([{ productId: P.plato, qty: 1 }]);
     const acc = (await call(waiter, 'POST', `/api/service/accounts/${o.accountId}/coupon`, { code: k.code })).json();
@@ -279,7 +279,7 @@ describe('editar un campo no altera los demás', () => {
   });
 
   it('cliente: cambiar los puntos conserva teléfono, correo y consentimiento', async () => {
-    const c = (await call(waiter, 'POST', '/api/loyalty/customers', { name: 'Ana', phone: '600', email: 'a@b.es', marketingConsent: true })).json();
+    const c = (await call(waiter, 'POST', '/api/loyalty/customers', { privacyAccepted: true, name: 'Ana', phone: '600', email: 'a@b.es', marketingConsent: true })).json();
     await call(admin, 'PATCH', `/api/loyalty/customers/${c.id}`, { points: 50 });
     const [x] = await sql`select phone, email, marketing_consent, points from customers where id = ${c.id}`;
     expect(x).toMatchObject({ phone: '600', email: 'a@b.es', marketing_consent: true, points: 50 });

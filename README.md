@@ -36,6 +36,7 @@ El manual pedía al personal que vigilara a mano varias cosas. Ahora las garanti
 - **Arqueo y cierre de caja**: apertura con fondo, entradas y salidas de efectivo con motivo, apertura del cajón portamonedas desde la impresora (automática al cobrar en efectivo y manual registrada), recuento ciego por billetes y monedas, descuadre y **cierre Z** correlativo con IVA, tickets, descuentos, anulaciones y cobros por empleado. Los cobros hechos con la caja cerrada pasan a la siguiente caja. El cierre lo hace quien tiene «Ventas y caja».
 - **Informes de ventas**: por producto (unidades, importe, base sin IVA y % de ventas), por categoría, por día, por hora (gráfica), por camarero (comandado y cobrado) y por forma de pago, con periodos rápidos y **exportación a Excel** (CSV con punto y coma y decimales con coma). Cuenta lo cobrado en el periodo para que cuadre con la caja.
 - **Gestor general**: alta y desactivación de establecimientos.
+- **Protección de datos (RGPD/LOPDGDD)**: política de privacidad, aviso legal (LSSI) y política de cookies generados con los datos de cada local, con aviso de los datos que faltan; información básica (primera capa) junto a la reserva web, el alta en fidelización y la lista de espera; casilla obligatoria de privacidad en la reserva web, alta en fidelización solo tras informar al cliente, WhatsApp solo con permiso expreso (reserva web, por teléfono y lista de espera) y comunicaciones comerciales opcionales; registro de cada consentimiento con versión del texto, vía, fecha e IP; exportación de los datos de un cliente (acceso y portabilidad) y supresión (las ventas se conservan sin la persona); baja y retirada de ofertas desde la tarjeta digital; anonimización automática de reservas, lista de espera y registro de avisos según los plazos del local; cartel informativo imprimible con QR. Son modelos orientativos que cada local debe revisar con su asesor.
 - **Seguridad del panel**: doble verificación con aplicación de autenticación (obligatoria para el gestor en producción, voluntaria para los demás) con 10 códigos de emergencia de un solo uso; recuperación de contraseña con enlace de un solo uso, que genera el administrador (o el gestor para el administrador) o que llega por correo si se configura Resend; cambio de contraseña y correo en «Mi cuenta». Al recuperar la contraseña se cierran todas las sesiones y la doble verificación se mantiene.
 
 ### Fase 2
@@ -99,7 +100,7 @@ Direcciones: `/gestion` (panel), `/personal` (PDA), `/carta/<código-de-mesa>` (
 ## Pruebas
 
 ```bash
-npm test                    # 103 pruebas de integración contra PostgreSQL (base loryand_test)
+npm test                    # 109 pruebas de integración contra PostgreSQL (base loryand_test)
 node e2e/servicio-completo.cjs /tmp/capturas   # servicio completo en navegador real
 node e2e/fase2.cjs /tmp/capturas               # lista de espera, reservas, menú y factura completa
 node e2e/fase3.cjs /tmp/capturas               # plano, almacén, cupones, idiomas, copias y tarjeta
@@ -109,6 +110,7 @@ node e2e/acceso.cjs /tmp/capturas              # acceso de camareros desde el TP
 node e2e/caja.cjs /tmp/capturas                # apertura, salida de efectivo, recuento y cierre Z
 node e2e/jornada.cjs /tmp/capturas             # fichaje con pausa, corrección con historial, CSV y hoja mensual
 node e2e/dividir.cjs /tmp/capturas             # cambiar de mesa y dividir la cuenta por productos
+node e2e/rgpd.cjs /tmp/capturas                # textos legales, consentimientos, exportación y baja del cliente
 node e2e/informes.cjs /tmp/capturas            # informes de ventas y exportación a Excel (ejecutar al final)
 node e2e/seguridad.cjs /tmp/capturas           # doble verificación y enlace de recuperación (servidor con REQUIRE_GESTOR_2FA=true)
 ```

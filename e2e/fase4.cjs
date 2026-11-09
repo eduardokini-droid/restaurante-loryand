@@ -88,7 +88,7 @@ function sign(order, params) {
   // 5. WhatsApp: confirmar una solicitud de reserva prepara el mensaje
   const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
   await fetch('http://localhost:3000/api/public/booking/demo', { method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ name: 'Carmen Ruiz', phone: '600 555 444', partySize: 3, date: tomorrow, time: '21:00' }) });
+    body: JSON.stringify({ name: 'Carmen Ruiz', phone: '600 555 444', partySize: 3, date: tomorrow, time: '21:00', acceptPrivacy: true, whatsappConsent: true }) });
   await admin.click('a:has-text("Reservas")');
   await admin.click('button:has-text("→")');
   await admin.click('tr:has-text("Carmen Ruiz") button:has-text("Confirmar")');
