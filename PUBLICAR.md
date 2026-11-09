@@ -149,3 +149,13 @@ Cada usuario guarda su correo en **Mi cuenta**.
 4. Imprime el **Cartel informativo** y ponlo junto a la caja: sirve para informar a quien se apunta a la fidelización o a la lista de espera.
 
 Desde ahora, los avisos por WhatsApp solo se envían a quien lo ha aceptado (casilla en la reserva web, o el personal la marca al tomar la reserva o apuntar en la lista de espera tras preguntarle). A los demás se les avisa por teléfono.
+
+## 13. Facturar a tus clientes (gestor de Loryand)
+
+1. Entra como gestor → **Datos de facturación**: razón social, NIF, dirección, IBAN, días para pagar y series (por defecto `LR` para facturas y `LRR` para rectificativas).
+2. **Clientes → Contrato** de cada local: plan, cuota mensual sin IVA, forma de pago y, si no coinciden con los del local, sus datos fiscales. Sin NIF del cliente no se le puede facturar.
+3. Cada mes, **Facturas → Emitir cuotas**. Puedes pulsarlo varias veces: no se duplica ninguna.
+4. Cuando te paguen, pulsa **Cobrada**. Si una factura tiene un error, **Rectificar** (no se borran).
+5. Para la gestoría: **Libro de facturas (Excel)**.
+
+Nota: estas facturas también tendrán que cumplir VERI*FACTU cuando se implante (lo dejamos para el final, junto con el de los restaurantes).

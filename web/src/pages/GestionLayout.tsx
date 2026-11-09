@@ -22,6 +22,8 @@ import Jornada from './Jornada';
 import Impresoras from './Impresoras';
 import Informes from './Informes';
 import Cuenta from './Cuenta';
+import Suscripcion from './Suscripcion';
+import FacturaLoryand from './FacturaLoryand';
 import { Waitlist } from '../components/Waitlist';
 import { ServiceScreen } from '../components/ServiceScreen';
 
@@ -47,6 +49,7 @@ const NAV: { to: string; label: string; module: string }[] = [
   { to: 'integraciones', label: 'Pagos y WhatsApp', module: 'admin' },
   { to: 'impresoras', label: 'Impresoras', module: 'admin' },
   { to: 'copias', label: 'Copias de seguridad', module: 'admin' },
+  { to: 'suscripcion', label: 'Suscripción y soporte', module: 'admin' },
   { to: 'cuenta', label: 'Mi cuenta', module: 'self' },
 ];
 
@@ -59,6 +62,7 @@ export default function GestionLayout() {
   const selected = getSelectedEstablishment();
   if (me.mfaRequired) return <div style={{ padding: '1.5rem', maxWidth: 760, margin: '0 auto' }}><Cuenta forced onDone={refresh} /><button className="btn ghost mt" onClick={logout}>Salir</button></div>;
   if (isSuper && !selected) {
+    if (pathname.startsWith('/gestion/factura/')) return <Routes><Route path="factura/:id" element={<FacturaLoryand />} /></Routes>;
     if (pathname.startsWith('/gestion/cuenta')) return <div style={{ padding: '1.5rem', maxWidth: 760, margin: '0 auto' }}><a className="btn ghost small" href="/gestion">← Establecimientos</a><Cuenta /></div>;
     return <Plataforma />;
   }
@@ -96,6 +100,8 @@ export default function GestionLayout() {
           <Route path="caja" element={<Caja />} />
           <Route path="informes" element={<Informes />} />
           <Route path="cuenta" element={<Cuenta />} />
+          <Route path="suscripcion" element={<Suscripcion />} />
+          <Route path="factura/:id" element={<FacturaLoryand />} />
           <Route path="carta" element={<Carta />} />
           <Route path="mesas" element={<Mesas />} />
           <Route path="camareros" element={<Camareros />} />

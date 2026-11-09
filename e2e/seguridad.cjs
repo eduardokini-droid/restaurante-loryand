@@ -50,7 +50,7 @@ const totp = (secret, offset = 0) => { const m = Buffer.alloc(8); m.writeBigUInt
   await g.waitForSelector('text=Guarda tus códigos de emergencia');
   await g.screenshot({ path: `${OUT}/seguridad-2-codigos.png` });
   await g.click('button:has-text("Ya los he guardado")');
-  await g.waitForSelector('text=Gestor general · Establecimientos');
+  await g.waitForSelector('text=Gestor general · Loryand');
 
   // 2. Administrador: activa la suya; al volver a entrar se le pide el código.
   const a = await page();
