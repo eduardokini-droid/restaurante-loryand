@@ -20,6 +20,7 @@ import Copias from './Copias';
 import Integraciones from './Integraciones';
 import Jornada from './Jornada';
 import Impresoras from './Impresoras';
+import Informes from './Informes';
 import { Waitlist } from '../components/Waitlist';
 import { ServiceScreen } from '../components/ServiceScreen';
 
@@ -31,6 +32,7 @@ const NAV: { to: string; label: string; module: string }[] = [
   { to: 'cocina', label: 'Cocina', module: 'kitchen' },
   { to: 'barra', label: 'Barra', module: 'bar' },
   { to: 'caja', label: 'Ventas y caja', module: 'cash' },
+  { to: 'informes', label: 'Informes', module: 'cash' },
   { to: 'almacen', label: 'Almacén y rentabilidad', module: 'stock' },
   { to: 'fidelizacion', label: 'Fidelización', module: 'loyalty' },
   { to: 'carta', label: 'Configuración y carta', module: 'config' },
@@ -85,6 +87,7 @@ export default function GestionLayout() {
           <Route path="cocina" element={<Kds destination="kitchen" />} />
           <Route path="barra" element={<Kds destination="bar" />} />
           <Route path="caja" element={<Caja />} />
+          <Route path="informes" element={<Informes />} />
           <Route path="carta" element={<Carta />} />
           <Route path="mesas" element={<Mesas />} />
           <Route path="camareros" element={<Camareros />} />

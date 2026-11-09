@@ -23,6 +23,7 @@ import integrationRoutes from './routes/integrations.js';
 import printingRoutes from './routes/printing.js';
 import cashRoutes from './routes/cash.js';
 import timesheetRoutes from './routes/timesheet.js';
+import salesRoutes from './routes/sales.js';
 
 export async function buildApp(opts: { logger?: boolean } = {}) {
   const app = Fastify({ logger: opts.logger ?? false, trustProxy: true, bodyLimit: 1_000_000 });
@@ -57,6 +58,7 @@ export async function buildApp(opts: { logger?: boolean } = {}) {
   await app.register(printingRoutes);
   await app.register(cashRoutes);
   await app.register(timesheetRoutes);
+  await app.register(salesRoutes);
 
   // En producción el servidor sirve también la aplicación web compilada.
   const webDist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../web/dist');
