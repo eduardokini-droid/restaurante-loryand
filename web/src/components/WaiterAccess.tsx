@@ -13,7 +13,7 @@ export function WaiterAccess({ onClose }: { onClose: () => void }) {
   const [left, setLeft] = useState(0);
   const [done, setDone] = useState<string | null>(null);
   const { busy, error, run } = useAction();
-  useEffect(() => { api('/api/service/waiters').then(setWaiters).catch(() => {}); }, []);
+  useEffect(() => { api('/api/service/waiters?todos=1').then(setWaiters).catch(() => {}); }, []);
 
   const generate = (w: { id: string; name: string }) => run(async () => {
     const r = await api('/api/service/waiter-access', { body: { waiterId: w.id } });

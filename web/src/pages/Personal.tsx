@@ -15,7 +15,7 @@ export default function Personal() {
   const { me, loading, refresh, logout } = useSession();
   if (loading) return <p className="muted" style={{ padding: '2rem' }}>Cargando…</p>;
   if (!me || me.actor.kind !== 'waiter') return <WaiterLogin onDone={refresh} />;
-  return <Pda name={me.actor.name} establishment={me.establishment?.name ?? ''} onShift={!!me.shift} shiftStart={me.shift?.started_at} refresh={refresh} logout={logout} />;
+  return <Pda name={me.actor.name} establishment={me.establishment?.name ?? ''} onShift={!!me.shift} shiftStart={me.shift?.started_at} breakSince={me.shift?.break_since ?? null} serviceStaff={(me.staffRole ?? 'sala') === 'sala'} refresh={refresh} logout={logout} />;
 }
 
 function WaiterLogin({ onDone }: { onDone: () => Promise<void> }) {
@@ -83,11 +83,11 @@ function WaiterLogin({ onDone }: { onDone: () => Promise<void> }) {
   );
 }
 
-function Pda({ name, establishment, onShift, shiftStart, refresh, logout }: { name: string; establishment: string; onShift: boolean; shiftStart?: string; refresh: () => Promise<void>; logout: () => Promise<void> }) {
+function Pda({ name, establishment, onShift, shiftStart, breakSince, serviceStaff, refresh, logout }: { name: string; establishment: string; onShift: boolean; shiftStart?: string; breakSince: string | null; serviceStaff: boolean; refresh: () => Promise<void>; logout: () => Promise<void> }) {
   const online = useOnline();
   const [queue, setQueue] = useState<QueuedOrder[]>(readQueue);
   const [requests, setRequests] = useState<any[]>([]);
-  const [tab, setTab] = useState<'sala' | 'espera'>('sala');
+  const [tab, setTab] = useState<'sala' | 'espera' | 'fichajes'>(serviceStaff ? 'sala' : 'fichajes');
   const { busy, error, run } = useAction();
   const toast = useToast();
   useEffect(() => onQueueChange(() => setQueue(readQueue())), []);
@@ -97,15 +97,18 @@ function Pda({ name, establishment, onShift, shiftStart, refresh, logout }: { na
   // Al recuperar la conexión se reintenta la cola. El identificador de cada pedido impide duplicarlo.
   useEffect(() => { if (online && queue.length) flushQueue().then((n) => n && toast(`${n} comanda(s) pendientes enviadas`)); }, [online]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const shift = (action: 'start' | 'end') => run(async () => { await api(`/api/service/shift/${action}`, { body: {} }); await refresh(); });
+  const shift = (action: 'start' | 'end' | 'break/start' | 'break/end') => run(async () => { await api(`/api/service/shift/${action}`, { body: {} }); await refresh(); });
   const attend = (id: string) => run(async () => { await api(`/api/service/requests/${id}/attend`, { body: {} }); loadReq(); });
 
   return (
     <div style={{ paddingBottom: queue.length || !online ? 80 : 0 }}>
       <header style={{ background: 'var(--green)', color: '#fff', padding: '.75rem 1rem' }} className="spread">
-        <div><strong>{name}</strong><div className="small" style={{ opacity: .85 }}>{establishment}{onShift && shiftStart ? ` · turno desde ${time(shiftStart)}` : ''}</div></div>
+        <div><strong>{name}</strong><div className="small" style={{ opacity: .85 }}>{establishment}{onShift && shiftStart ? ` · turno desde ${time(shiftStart)}` : ''}{breakSince ? ` · en pausa desde ${time(breakSince)}` : ''}</div></div>
         <div className="row" style={{ gap: '.4rem' }}>
-          {onShift
+          {onShift && serviceStaff && (breakSince
+            ? <button className="btn small" disabled={busy} onClick={() => shift('break/end')}>Fin de pausa</button>
+            : <button className="btn small ghost" style={{ color: '#fff', borderColor: 'rgba(255,255,255,.5)' }} disabled={busy} onClick={() => shift('break/start')}>Pausa</button>)}
+          {onShift && serviceStaff
             ? <button className="btn small" disabled={busy} onClick={() => confirm('¿Fichar la salida?') && shift('end')}>Fichar salida</button>
             : null}
           <button className="btn small ghost" style={{ color: '#fff' }} onClick={logout}>Salir</button>
@@ -113,12 +116,23 @@ function Pda({ name, establishment, onShift, shiftStart, refresh, logout }: { na
       </header>
       <div style={{ padding: '1rem' }} className="stack">
         <ErrorText error={error} />
-        {!onShift ? (
-          <div className="card stack">
-            <h2>Fuera de turno</h2>
-            <p className="muted">Ficha la entrada para empezar a tomar comandas.</p>
-            <button className="btn primary block" disabled={busy} onClick={() => shift('start')}>Fichar entrada</button>
-          </div>
+        {(!onShift || !serviceStaff) ? (
+          <>
+            <div className="card stack">
+              <h2>{onShift ? (breakSince ? 'En pausa' : 'Trabajando') : 'Fuera de turno'}</h2>
+              {onShift && shiftStart && <p className="muted">Entrada a las {time(shiftStart)}{breakSince ? ` · pausa desde las ${time(breakSince)}` : ''}</p>}
+              {!onShift && <p className="muted">{serviceStaff ? 'Ficha la entrada para empezar a tomar comandas.' : 'Ficha tu entrada al llegar y tu salida al terminar.'}</p>}
+              {!onShift
+                ? <button className="btn primary block" disabled={busy} onClick={() => shift('start')}>Fichar entrada</button>
+                : <div className="row">
+                    {breakSince
+                      ? <button className="btn primary" disabled={busy} onClick={() => shift('break/end')}>Fin de pausa</button>
+                      : <button className="btn" disabled={busy} onClick={() => shift('break/start')}>Iniciar pausa</button>}
+                    <button className="btn terra" disabled={busy} onClick={() => confirm('¿Fichar la salida?') && shift('end')}>Fichar salida</button>
+                  </div>}
+            </div>
+            <MyShifts key={`${shiftStart}-${breakSince}-${onShift}`} />
+          </>
         ) : (
           <>
             {requests.length > 0 && (
@@ -136,8 +150,9 @@ function Pda({ name, establishment, onShift, shiftStart, refresh, logout }: { na
             <div className="chips">
               <button className={`chip ${tab === 'sala' ? 'on' : ''}`} onClick={() => setTab('sala')}>Sala</button>
               <button className={`chip ${tab === 'espera' ? 'on' : ''}`} onClick={() => setTab('espera')}>Lista de espera</button>
+              <button className={`chip ${tab === 'fichajes' ? 'on' : ''}`} onClick={() => setTab('fichajes')}>Mis fichajes</button>
             </div>
-            {tab === 'sala' ? <ServiceScreen mode="pda" /> : <Waitlist />}
+            {tab === 'sala' ? <ServiceScreen mode="pda" /> : tab === 'espera' ? <Waitlist /> : <MyShifts />}
           </>
         )}
       </div>
@@ -152,6 +167,34 @@ function Pda({ name, establishment, onShift, shiftStart, refresh, logout }: { na
           </>}
         </div>
       )}
+    </div>
+  );
+}
+
+/** «Mis fichajes»: cada trabajador puede consultar su propio registro de jornada. */
+function MyShifts() {
+  const [month, setMonth] = useState(() => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' }).slice(0, 7));
+  const [rows, setRows] = useState<any[]>([]);
+  useEffect(() => {
+    const [y, m] = month.split('-').map(Number);
+    const last = new Date(y, m, 0).getDate();
+    api(`/api/service/my-shifts?from=${month}-01&to=${month}-${String(last).padStart(2, '0')}`).then((r) => setRows(r.shifts)).catch(() => {});
+  }, [month]);
+  const total = rows.filter((r) => r.status !== 'voided').reduce((s, r) => s + r.worked_min, 0);
+  const hm = (min: number) => `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, '0')} min`;
+  return (
+    <div className="card stack">
+      <div className="spread"><h3 style={{ margin: 0 }}>Mis fichajes</h3><input type="month" value={month} onChange={(e) => setMonth(e.target.value)} style={{ width: 'auto' }} /></div>
+      {rows.length === 0 && <p className="muted small">No hay fichajes este mes.</p>}
+      {rows.map((r) => (
+        <div key={r.id} className="spread small" style={r.status === 'voided' ? { opacity: .5, textDecoration: 'line-through' } : undefined}>
+          <span>{new Date(r.started_at).toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: '2-digit' })} · {time(r.started_at)} → {r.ended_at ? time(r.ended_at) : 'en curso'}{r.break_min ? ` · pausa ${r.break_min} min` : ''}
+            {r.needs_review && <span className="badge danger"> revisar</span>}{r.corrections > 0 && <span className="badge warn"> corregido</span>}</span>
+          <strong>{hm(r.worked_min)}</strong>
+        </div>
+      ))}
+      <div className="spread"><strong>Total del mes</strong><strong>{hm(total)}</strong></div>
+      <p className="small muted" style={{ margin: 0 }}>Si ves un error, díselo a tu encargado: las correcciones quedan registradas con su motivo.</p>
     </div>
   );
 }

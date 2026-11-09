@@ -18,6 +18,7 @@ import Almacen from './Almacen';
 import Fidelizacion from './Fidelizacion';
 import Copias from './Copias';
 import Integraciones from './Integraciones';
+import Jornada from './Jornada';
 import Impresoras from './Impresoras';
 import { Waitlist } from '../components/Waitlist';
 import { ServiceScreen } from '../components/ServiceScreen';
@@ -36,7 +37,8 @@ const NAV: { to: string; label: string; module: string }[] = [
   { to: 'menu', label: 'Menú del día', module: 'config' },
   { to: 'plano', label: 'Plano del local', module: 'tables' },
   { to: 'mesas', label: 'Mesas y QR', module: 'tables' },
-  { to: 'camareros', label: 'Camareros', module: 'waiters' },
+  { to: 'camareros', label: 'Personal', module: 'waiters' },
+  { to: 'jornada', label: 'Registro de jornada', module: 'waiters' },
   { to: 'usuarios', label: 'Usuarios y permisos', module: 'users' },
   { to: 'negocio', label: 'Datos del negocio', module: 'config' },
   { to: 'integraciones', label: 'Pagos y WhatsApp', module: 'admin' },
@@ -78,6 +80,7 @@ export default function GestionLayout() {
           <Route path="fidelizacion" element={<Fidelizacion />} />
           <Route path="copias" element={<Copias />} />
           <Route path="integraciones" element={<Integraciones />} />
+          <Route path="jornada" element={<Jornada />} />
           <Route path="impresoras" element={<Impresoras />} />
           <Route path="cocina" element={<Kds destination="kitchen" />} />
           <Route path="barra" element={<Kds destination="bar" />} />

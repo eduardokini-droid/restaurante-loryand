@@ -5,14 +5,15 @@ import { time } from '../lib/format';
 import { useSession } from '../lib/session';
 import { ErrorText, Modal, useAction, useToast } from '../components/ui';
 
-interface Waiter { id: string; code: number; name: string; active: boolean; qr_token: string; username: string; table_ids: string[]; shift_started_at: string | null }
+interface Waiter { id: string; code: number; name: string; active: boolean; qr_token: string; username: string; table_ids: string[]; shift_started_at: string | null; staff_role: string; document_id: string }
+const ROLE: Record<string, string> = { sala: 'Sala (camarero)', cocina: 'Cocina', barra: 'Barra', otros: 'Otros' };
 
 export default function Camareros() {
   const { me, refresh } = useSession();
   const [waiters, setWaiters] = useState<Waiter[]>([]);
   const [tables, setTables] = useState<{ id: string; label: string }[]>([]);
   const [shared, setShared] = useState<boolean>(me?.establishment?.settings?.sharedTables ?? true);
-  const [form, setForm] = useState({ name: '', pin: '' });
+  const [form, setForm] = useState({ name: '', pin: '', staffRole: 'sala', documentId: '' });
   const [qr, setQr] = useState<Waiter | null>(null);
   const { busy, error, run } = useAction();
   const toast = useToast();
@@ -23,13 +24,14 @@ export default function Camareros() {
   }, []);
   useEffect(load, [load]);
 
-  const create = () => run(async () => { const w = await api('/api/admin/waiters', { body: form }); toast(`Creado ${w.username}`); setForm({ name: '', pin: '' }); load(); });
+  const create = () => run(async () => { const w = await api('/api/admin/waiters', { body: form }); toast(`Creado ${w.username}`); setForm({ name: '', pin: '', staffRole: 'sala', documentId: '' }); load(); });
   const patch = (w: Waiter, body: object, msg?: string) => run(async () => { await api(`/api/admin/waiters/${w.id}`, { method: 'PATCH', body }); if (msg) toast(msg); load(); });
   const toggleShared = (v: boolean) => run(async () => { await api('/api/admin/establishment', { method: 'PUT', body: { settings: { sharedTables: v } } }); setShared(v); refresh(); toast('Guardado'); });
 
   return (
     <div className="stack">
-      <h1>Camareros y claves</h1>
+      <h1>Personal y claves</h1>
+      <p className="small muted">Todo el personal ficha con su usuario y PIN. Los de sala toman comandas y cobran; cocina, barra y otros solo fichan.</p>
       <div className="card">
         <label className="check"><input type="checkbox" checked={shared} disabled={busy} onChange={(e) => toggleShared(e.target.checked)} /> <strong>Mesas compartidas entre camareros</strong></label>
         <p className="small muted" style={{ margin: 0 }}>Activado: todos atienden todas las mesas y reciben sus avisos. Desactivado: cada camarero solo ve sus mesas asignadas (asignación exclusiva).</p>
@@ -37,16 +39,22 @@ export default function Camareros() {
       <div className="card row">
         <input style={{ maxWidth: 220 }} placeholder="Nombre" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         <input style={{ maxWidth: 160 }} placeholder="PIN (4 a 6 cifras)" inputMode="numeric" value={form.pin} onChange={(e) => setForm({ ...form, pin: e.target.value.replace(/\D/g, '').slice(0, 6) })} />
-        <button className="btn primary" disabled={busy || !form.name || form.pin.length < 4} onClick={create}>Crear camarero</button>
+        <select style={{ maxWidth: 170 }} value={form.staffRole} onChange={(e) => setForm({ ...form, staffRole: e.target.value })}>{Object.entries(ROLE).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
+        <input style={{ maxWidth: 150 }} placeholder="DNI/NIE (opcional)" value={form.documentId} onChange={(e) => setForm({ ...form, documentId: e.target.value })} />
+        <button className="btn primary" disabled={busy || !form.name || form.pin.length < 4} onClick={create}>Crear</button>
       </div>
       <ErrorText error={error} />
       <div className="card" style={{ overflowX: 'auto' }}>
         <table className="list">
-          <thead><tr><th>Camarero</th><th>Usuario</th><th>Turno</th>{!shared && <th>Mesas asignadas</th>}<th></th></tr></thead>
+          <thead><tr><th>Persona</th><th>Usuario</th><th>Turno</th>{!shared && <th>Mesas asignadas</th>}<th></th></tr></thead>
           <tbody>
             {waiters.map((w) => (
               <tr key={w.id} style={w.active ? undefined : { opacity: .55 }}>
-                <td><strong>{w.name}</strong>{!w.active && <div className="badge grey">Desactivado</div>}</td>
+                <td><strong>{w.name}</strong>{!w.active && <div className="badge grey">Desactivado</div>}
+                  <div className="row" style={{ gap: '.3rem', marginTop: '.2rem' }}>
+                    <select style={{ width: 'auto', padding: '.2rem .4rem', fontSize: '.8rem' }} value={w.staff_role} disabled={busy} onChange={(e) => patch(w, { staffRole: e.target.value }, 'Puesto actualizado')}>{Object.entries(ROLE).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
+                    <input style={{ width: 120, padding: '.2rem .4rem', fontSize: '.8rem' }} placeholder="DNI/NIE" defaultValue={w.document_id} onBlur={(e) => e.target.value.trim().toUpperCase() !== w.document_id && patch(w, { documentId: e.target.value }, 'DNI guardado')} />
+                  </div></td>
                 <td><code>{w.username}</code></td>
                 <td>{w.shift_started_at ? <span className="badge">Desde {time(w.shift_started_at)}</span> : <span className="muted small">Fuera de turno</span>}</td>
                 {!shared && (

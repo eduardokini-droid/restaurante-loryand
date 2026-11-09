@@ -66,9 +66,9 @@ export default async function reportRoutes(app: FastifyInstance) {
     return sql`
       select w.id, w.name, 'camarero-' || w.code as username,
         coalesce((select json_agg(json_build_object('start', s.started_at, 'end', s.ended_at) order by s.started_at)
-                  from shifts s where s.waiter_id = w.id and s.started_at between ${from}::timestamp and ${to}::timestamp), '[]') as shifts,
+                  from shifts s where s.waiter_id = w.id and s.status = 'valid' and s.started_at between ${from}::timestamp and ${to}::timestamp), '[]') as shifts,
         coalesce((select sum(extract(epoch from (coalesce(s.ended_at, now()) - s.started_at)) / 60)::int
-                  from shifts s where s.waiter_id = w.id and s.started_at between ${from}::timestamp and ${to}::timestamp), 0) as worked_min,
+                  from shifts s where s.waiter_id = w.id and s.status = 'valid' and s.started_at between ${from}::timestamp and ${to}::timestamp), 0) as worked_min,
         (select count(*)::int from orders o where o.waiter_id = w.id and o.created_at between ${from}::timestamp and ${to}::timestamp) as orders,
         coalesce((select sum(i.unit_cents * i.qty)::int from orders o join order_items i on i.order_id = o.id
                   where o.waiter_id = w.id and i.status <> 'cancelled' and o.created_at between ${from}::timestamp and ${to}::timestamp), 0) as ordered_cents,

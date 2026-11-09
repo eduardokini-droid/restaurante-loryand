@@ -12,6 +12,7 @@ import { createOrder, fireNextCourse, orderInput, setItemsStatus } from '../serv
 import { paymentInput, registerPayment } from '../services/payments.js';
 import { convertToFull, issueDocument } from '../services/documents.js';
 import { setPhysicalState } from '../services/tables.js';
+import { endShift, startShift } from '../services/timesheet.js';
 import { autoOpenDrawer, autoPrintTicket, printFire, printOrder } from '../services/printing.js';
 
 const id = z.object({ id: z.string().uuid() });
@@ -25,7 +26,9 @@ async function tableTokenOfAccount(accountId: string): Promise<string | undefine
 /** El camarero debe haber fichado la entrada para operar (capítulo 12 del manual). */
 async function requireOnShift(a: Actor) {
   if (a.kind !== 'waiter') return;
-  const [s] = await sql`select 1 from shifts where waiter_id = ${a.id} and ended_at is null`;
+  const [w] = await sql`select staff_role from waiters where id = ${a.id}`;
+  if (w?.staff_role !== 'sala') throw forbidden('Tu usuario es solo para fichar. Las comandas y los cobros los hace el personal de sala.');
+  const [s] = await sql`select 1 from shifts where waiter_id = ${a.id} and ended_at is null and status = 'valid'`;
   if (!s) throw new AppError(409, 'not_on_shift', 'Ficha la entrada para empezar a trabajar');
 }
 
@@ -102,7 +105,10 @@ export default async function serviceRoutes(app: FastifyInstance) {
 
   app.get('/api/service/waiters', async (req) => {
     requireService(req);
-    return sql`select id, code, name from waiters where establishment_id = ${establishmentOf(req)} and active order by name`;
+    // Por defecto, solo personal de sala (para asociar cuentas); con ?todos=1, todo el personal (acceso para fichar).
+    const all = (req.query as { todos?: string }).todos === '1';
+    return sql`select id, code, name, staff_role from waiters where establishment_id = ${establishmentOf(req)} and active
+               and (${all} or staff_role = 'sala') order by name`;
   });
 
   /** "Acceso camareros" en el TPV: QR de un solo uso (2 minutos) para que el camarero entre en su teléfono con su PIN. */
@@ -126,7 +132,7 @@ export default async function serviceRoutes(app: FastifyInstance) {
   app.post('/api/service/shift/start', async (req) => {
     const a = requireActor(req);
     if (a.kind !== 'waiter') throw forbidden('Solo los camareros fichan');
-    await sql`insert into shifts (waiter_id) values (${a.id}) on conflict do nothing`;
+    await startShift(a.id);
     notify(a.establishmentId, ['waiters']);
     return { ok: true };
   });
@@ -134,7 +140,7 @@ export default async function serviceRoutes(app: FastifyInstance) {
   app.post('/api/service/shift/end', async (req) => {
     const a = requireActor(req);
     if (a.kind !== 'waiter') throw forbidden('Solo los camareros fichan');
-    await sql`update shifts set ended_at = now() where waiter_id = ${a.id} and ended_at is null`;
+    await endShift(a.id);
     notify(a.establishmentId, ['waiters']);
     return { ok: true };
   });

@@ -179,9 +179,9 @@ export default async function adminRoutes(app: FastifyInstance) {
     requireModule(req, 'waiters');
     const est = establishmentOf(req);
     return sql`
-      select w.id, w.code, w.name, w.active, w.qr_token, 'camarero-' || w.code as username,
+      select w.id, w.code, w.name, w.active, w.qr_token, 'camarero-' || w.code as username, w.staff_role, w.document_id,
              coalesce(array_agg(wt.table_id) filter (where wt.table_id is not null), '{}') as table_ids,
-             (select started_at from shifts s where s.waiter_id = w.id and s.ended_at is null) as shift_started_at
+             (select started_at from shifts s where s.waiter_id = w.id and s.ended_at is null and s.status = 'valid') as shift_started_at
       from waiters w left join waiter_tables wt on wt.waiter_id = w.id
       where w.establishment_id = ${est}
       group by w.id order by w.code`;
@@ -192,7 +192,7 @@ export default async function adminRoutes(app: FastifyInstance) {
   app.post('/api/admin/waiters', async (req) => {
     const a = requireModule(req, 'waiters');
     const est = establishmentOf(req);
-    const b = parse(z.object({ name: z.string().min(1).max(80), pin: pinSchema }), req.body);
+    const b = parse(z.object({ name: z.string().min(1).max(80), pin: pinSchema, staffRole: z.enum(['sala', 'cocina', 'barra', 'otros']).default('sala'), documentId: z.string().max(20).default('') }), req.body);
     const lookup = pinLookup(est, b.pin);
     return sql.begin(async (tx) => {
       await tx`select id from establishments where id = ${est} for update`;
@@ -200,9 +200,9 @@ export default async function adminRoutes(app: FastifyInstance) {
       if (dup) throw conflict('pin_taken', 'Ese PIN ya lo usa otro camarero del local');
       const [{ next }] = await tx`select coalesce(max(code), 0) + 1 as next from waiters where establishment_id = ${est}`;
       const [w] = await tx`
-        insert into waiters (establishment_id, code, name, pin_hash, pin_lookup)
-        values (${est}, ${next}, ${b.name}, ${await hashPassword(b.pin)}, ${lookup})
-        returning id, code, name, active, qr_token, 'camarero-' || code as username`;
+        insert into waiters (establishment_id, code, name, pin_hash, pin_lookup, staff_role, document_id)
+        values (${est}, ${next}, ${b.name}, ${await hashPassword(b.pin)}, ${lookup}, ${b.staffRole}, ${b.documentId.trim().toUpperCase()})
+        returning id, code, name, active, qr_token, 'camarero-' || code as username, staff_role, document_id`;
       await audit(tx, est, actorLabel(a), 'waiter.create', { waiterId: w.id });
       return w;
     });
@@ -215,12 +215,15 @@ export default async function adminRoutes(app: FastifyInstance) {
     const b = parse(z.object({
       name: z.string().min(1).max(80), pin: pinSchema, active: z.boolean(),
       tableIds: z.array(z.string().uuid()), regenerateQr: z.literal(true),
+      staffRole: z.enum(['sala', 'cocina', 'barra', 'otros']), documentId: z.string().max(20),
     }).partial(), req.body);
     await sql.begin(async (tx) => {
       const [w] = await tx`select id from waiters where id = ${wid} and establishment_id = ${est} for update`;
       if (!w) throw notFound('Camarero');
       if (b.name) await tx`update waiters set name = ${b.name} where id = ${wid}`;
       if (b.active !== undefined) await tx`update waiters set active = ${b.active} where id = ${wid}`;
+      if (b.staffRole) await tx`update waiters set staff_role = ${b.staffRole} where id = ${wid}`;
+      if (b.documentId !== undefined) await tx`update waiters set document_id = ${b.documentId.trim().toUpperCase()} where id = ${wid}`;
       if (b.pin) {
         const lookup = pinLookup(est, b.pin);
         const [dup] = await tx`select 1 from waiters where establishment_id = ${est} and pin_lookup = ${lookup} and id <> ${wid}`;

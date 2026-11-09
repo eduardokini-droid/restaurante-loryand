@@ -4,9 +4,10 @@ import { api, ApiError } from './api';
 export interface Me {
   actor: { kind: 'user' | 'waiter'; id: string; name: string; role?: 'superadmin' | 'admin' | 'staff'; establishmentId: string | null; code?: number };
   establishment: { id: string; slug: string; name: string; features: string[]; settings: Record<string, boolean> } | null;
-  shift: { id: string; started_at: string } | null;
+  shift: { id: string; started_at: string; break_since?: string | null } | null;
   modules: string[];
   onlinePayment?: boolean;
+  staffRole?: 'sala' | 'cocina' | 'barra' | 'otros' | null;
 }
 interface Ctx { me: Me | null; loading: boolean; refresh: () => Promise<void>; logout: () => Promise<void> }
 const SessionCtx = createContext<Ctx>(null as never);

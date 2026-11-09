@@ -8,6 +8,7 @@ import { sql } from './db.js';
 import { bootstrap } from './bootstrap.js';
 import { saveBackup } from './services/backups.js';
 import { retryPendingUploads, uploadBackup } from './services/offsite.js';
+import { autoCloseForgotten } from './services/timesheet.js';
 import { sendDueReminders } from './services/messaging.js';
 
 const applied = await migrate();
@@ -56,6 +57,8 @@ async function dailyBackups() {
   }
 }
 setTimeout(dailyBackups, 60_000);
+// Salidas olvidadas: se cierran con la última actividad y quedan pendientes de revisar.
+setInterval(() => { autoCloseForgotten().catch((err) => app.log.error({ err }, 'Error al cerrar turnos olvidados')); }, 3600_000);
 // Recordatorios de reserva por WhatsApp (modo automático), cada 10 minutos.
 setInterval(() => { sendDueReminders().catch((err) => app.log.error({ err }, 'Error en recordatorios')); }, 600_000);
 setInterval(dailyBackups, 3600_000);

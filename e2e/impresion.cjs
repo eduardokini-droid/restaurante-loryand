@@ -64,11 +64,11 @@ const OUT = process.argv[2];
     await pda.click('button:has-text("Confirmar cobro")');
     await pda.waitForSelector('.doc');
     await pda.click('.modal button:has-text("Imprimir ticket")');
-    for (let i = 0; i < 80 && received.length < 4; i++) await new Promise((r) => setTimeout(r, 100));
+    for (let i = 0; i < 100 && !received.some((r) => r.includes('FACTURA SIMPLIFICADA')); i++) await new Promise((r) => setTimeout(r, 100));
     fs.writeFileSync(`${OUT}/imp-comanda-cocina.txt`, (received[1] || '').replace(/[\x00-\x09\x0b-\x1f]/g, ''));
     console.log(JSON.stringify({
       trabajosRecibidos: received.length,
-      prueba: /PRUEBA/.test(received[0] || '') && received[0].includes('\xa4'),
+      prueba: received.some((r) => /PRUEBA/.test(r) && r.includes('\xa4')),
       comandaCocina: received.some((r) => r.includes('COCINA') && r.includes('Croquetas') && r.includes('NOTA: Sin gluten')),
       comandaBarra: received.some((r) => r.includes('BARRA') && r.includes('Ca\xa4a')),
       ticket: received.some((r) => r.includes('FACTURA SIMPLIFICADA')),

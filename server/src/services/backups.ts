@@ -17,6 +17,8 @@ const TABLES: Array<{ name: string; where: string }> = [
   { name: 'printers', where: 'establishment_id = $1' },
   { name: 'waiter_tables', where: 'waiter_id in (select id from waiters where establishment_id = $1)' },
   { name: 'shifts', where: 'waiter_id in (select id from waiters where establishment_id = $1)' },
+  { name: 'shift_breaks', where: 'shift_id in (select s.id from shifts s join waiters w on w.id = s.waiter_id where w.establishment_id = $1)' },
+  { name: 'shift_edits', where: 'shift_id in (select s.id from shifts s join waiters w on w.id = s.waiter_id where w.establishment_id = $1)' },
   { name: 'daily_menus', where: 'establishment_id = $1' },
   { name: 'customers', where: 'establishment_id = $1' },
   { name: 'coupons', where: 'establishment_id = $1' },
@@ -127,7 +129,7 @@ export async function restore(tx: Tx, establishmentId: string, data: BackupData)
     if (!rows.length) continue;
     await tx.unsafe(`insert into ${t.name} select * from json_populate_recordset(null::${t.name}, $1::text::json)`, [JSON.stringify(rows)]);
   }
-  for (const seq of ['audit_log', 'stock_movements', 'table_occupancy']) {
+  for (const seq of ['audit_log', 'stock_movements', 'table_occupancy', 'shift_edits']) {
     await tx.unsafe(`select setval(pg_get_serial_sequence('${seq}', 'id'), greatest((select coalesce(max(id), 1) from ${seq}), 1))`);
   }
   const est = data.establishment;

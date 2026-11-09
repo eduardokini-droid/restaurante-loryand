@@ -32,6 +32,7 @@ El manual pedía al personal que vigilara a mano varias cosas. Ahora las garanti
 - **Cobro**: efectivo con cambio, tarjeta y Bizum (registro manual), pagos parciales para dividir la cuenta, unir cuentas.
 - **Documentos**: proforma (marcada como no justificante de pago) y factura simplificada con numeración correlativa por serie y año y desglose de IVA.
 - **Ventas y caja**: periodos (hoy, semana, mes, 45 días), cobrado por forma de pago y por empleado, pendiente aparte, registro documental, impresión del cierre.
+- **Registro de jornada** (art. 34.9 ET): ficha **todo el personal** (sala, cocina, barra, otros) con su usuario y PIN; los que no son de sala solo ven la pantalla de fichaje. Pausas, «Mis fichajes» en el móvil, correcciones del encargado con **motivo obligatorio e historial** (quién, cuándo, valor anterior y nuevo), anulación sin borrado, salidas olvidadas cerradas con la última actividad real y marcadas «pendiente de revisar», exportación CSV para Excel (con DNI/NIE) y hoja mensual por trabajador para firmar.
 - **Arqueo y cierre de caja**: apertura con fondo, entradas y salidas de efectivo con motivo, apertura del cajón portamonedas desde la impresora (automática al cobrar en efectivo y manual registrada), recuento ciego por billetes y monedas, descuadre y **cierre Z** correlativo con IVA, tickets, descuentos, anulaciones y cobros por empleado. Los cobros hechos con la caja cerrada pasan a la siguiente caja. El cierre lo hace quien tiene «Ventas y caja».
 - **Gestor general**: alta y desactivación de establecimientos.
 
@@ -96,7 +97,7 @@ Direcciones: `/gestion` (panel), `/personal` (PDA), `/carta/<código-de-mesa>` (
 ## Pruebas
 
 ```bash
-npm test                    # 82 pruebas de integración contra PostgreSQL (base loryand_test)
+npm test                    # 87 pruebas de integración contra PostgreSQL (base loryand_test)
 node e2e/servicio-completo.cjs /tmp/capturas   # servicio completo en navegador real
 node e2e/fase2.cjs /tmp/capturas               # lista de espera, reservas, menú y factura completa
 node e2e/fase3.cjs /tmp/capturas               # plano, almacén, cupones, idiomas, copias y tarjeta
@@ -104,6 +105,7 @@ node e2e/fase4.cjs /tmp/capturas               # cobro con QR (Redsys simulado) 
 node e2e/impresion.cjs /tmp/capturas           # agente real con impresora de red simulada
 node e2e/acceso.cjs /tmp/capturas              # acceso de camareros desde el TPV con QR de un solo uso + PIN
 node e2e/caja.cjs /tmp/capturas                # apertura, salida de efectivo, recuento y cierre Z
+node e2e/jornada.cjs /tmp/capturas             # fichaje con pausa, corrección con historial, CSV y hoja mensual
 ```
 
 Las pruebas cubren: comandas duplicadas, opciones obligatorias, pases retenidos, fichaje, modo exclusivo, cuentas de barra,

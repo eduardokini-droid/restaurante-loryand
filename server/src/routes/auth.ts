@@ -6,6 +6,7 @@ import { COOKIE, checkPassword, createSession, destroySession, pinLookup, requir
 import { AppError } from '../errors.js';
 import { parse } from '../validate.js';
 import { checkLimit, recordFailure } from '../ratelimit.js';
+import { startShift } from '../services/timesheet.js';
 
 const fail = () => new AppError(401, 'bad_credentials', 'Usuario o contraseña incorrectos');
 
@@ -64,7 +65,7 @@ export default async function authRoutes(app: FastifyInstance) {
       const [used] = await sql`update waiter_access_tokens set used_at = now() where token_hash = ${accessHash} and used_at is null returning waiter_id`;
       if (!used) throw new AppError(410, 'access_expired', 'Este código ya se ha usado. Pide uno nuevo en el TPV.');
     }
-    if (body.clockIn) await sql`insert into shifts (waiter_id) values (${waiterId}) on conflict do nothing`;
+    if (body.clockIn) await startShift(waiterId);
     setSessionCookie(reply, await createSession('waiter', waiterId));
     return { ok: true };
   });
@@ -103,15 +104,18 @@ export default async function authRoutes(app: FastifyInstance) {
       establishment = e;
     }
     let shift = null;
+    let staffRole: string | null = null;
     if (a.kind === 'waiter') {
-      const [s] = await sql`select id, started_at from shifts where waiter_id = ${a.id} and ended_at is null`;
-      shift = s ?? null;
+      const [s] = await sql`select s.id, s.started_at, w.staff_role, (select started_at from shift_breaks b where b.shift_id = s.id and b.ended_at is null) as break_since
+                            from waiters w left join shifts s on s.waiter_id = w.id and s.ended_at is null and s.status = 'valid' where w.id = ${a.id}`;
+      shift = s?.id ? { id: s.id, started_at: s.started_at, break_since: s.break_since } : null;
+      staffRole = s?.staff_role ?? 'sala';
     }
     let onlinePayment = false;
     if (a.establishmentId) {
       const [pay] = await sql`select 1 from integrations where establishment_id = ${a.establishmentId} and kind = 'redsys' and enabled and secret_enc is not null`;
       onlinePayment = !!pay;
     }
-    return { actor: a, establishment, shift, modules: MODULES.filter((m) => can(a, m)), onlinePayment };
+    return { actor: a, establishment, shift, modules: MODULES.filter((m) => can(a, m)), onlinePayment, staffRole };
   });
 }
