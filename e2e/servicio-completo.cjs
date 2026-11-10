@@ -2,10 +2,21 @@
 // Uso: node e2e/servicio-completo.cjs <carpeta-para-capturas>
 const { chromium } = require('playwright');
 const OUT = process.argv[2];
+/** Cocina o barra: empieza y termina todo lo que hay en «Nuevos». */
+async function allReady(p) {
+  while (await p.locator('section[aria-label="Nuevos"] .kds-card button:has-text("Empezar")').count()) {
+    await p.locator('section[aria-label="Nuevos"] .kds-card button:has-text("Empezar")').first().click();
+    await p.waitForTimeout(300);
+  }
+  while (await p.locator('section[aria-label="Preparando"] .kds-card button:has-text("Listo")').count()) {
+    await p.locator('section[aria-label="Preparando"] .kds-card button:has-text("Listo")').first().click();
+    await p.waitForTimeout(300);
+  }
+}
 (async () => {
   const browser = await chromium.launch();
   const errors = [];
-  const watch = (p, n) => { p.on('pageerror', e => errors.push(`${n}: ${e.message}`)); p.on('console', m => m.type() === 'error' && errors.push(`${n} console: ${m.text()}`)); };
+  const watch = (p, n) => { p.on('pageerror', e => errors.push(`${n}: ${e.message}`)); p.on('console', m => m.type() === 'error' && !/status of 401/.test(m.text()) && errors.push(`${n} console: ${m.text()}`)); };
   // 1. Administrador
   const admin = await (await browser.newContext({ locale: 'es-ES', viewport: { width: 1280, height: 850 } })).newPage(); watch(admin, 'admin');
   await admin.goto('http://localhost:3000/gestion');
@@ -62,18 +73,19 @@ const OUT = process.argv[2];
   await kit.fill('input[autocomplete=username]', 'cocina');
   await kit.fill('input[type=password]', 'cocina1234');
   await kit.click('button:has-text("Entrar")');
-  await kit.waitForSelector('.ticket');
+  await kit.waitForSelector('section[aria-label="Nuevos"] .kds-card');
   await kit.screenshot({ path: `${OUT}/4-cocina.png` });
-  const kitchenText = await kit.locator('.kds').textContent();
+  const kitchenText = await kit.locator('section[aria-label="Nuevos"]').textContent();
   if (kitchenText.includes('Entrecot')) errors.push('El 2.º pase no debería estar en cocina aún');
-  await kit.click('button:has-text("Todo listo")');
+  if (!(await kit.locator('section[aria-label="En espera"]').textContent()).includes('Entrecot')) errors.push('El 2.º pase debería verse en espera');
+  await allReady(kit);
   // Barra
   const bar = await (await browser.newContext({ locale: 'es-ES' })).newPage(); watch(bar, 'barra');
   await bar.goto('http://localhost:3000/gestion');
   await bar.fill('input[autocomplete=username]', 'barra'); await bar.fill('input[type=password]', 'barra1234');
   await bar.click('button:has-text("Entrar")');
-  await bar.waitForSelector('.ticket:has-text("Coca-Cola Zero")');
-  await bar.click('button:has-text("Todo listo")');
+  await bar.waitForSelector('section[aria-label="Nuevos"] .kds-card:has-text("Coca-Cola Zero")');
+  await allReady(bar);
   // 5. Admin ve la sala con avisos (tiempo real)
   await admin.waitForSelector('.table-tile.alert');
   await admin.screenshot({ path: `${OUT}/1-sala-admin.png`, fullPage: true });
@@ -82,8 +94,8 @@ const OUT = process.argv[2];
   await pda.click('button:has-text("Entregado en mesa")');
   await pda.click('button:has-text("Marchar 2.º pase")');
   await pda.waitForSelector('text=2.º pase en marcha');
-  await kit.waitForSelector('.ticket:has-text("Entrecot")');
-  await kit.click('button:has-text("Todo listo")');
+  await kit.waitForSelector('section[aria-label="Nuevos"] .kds-card:has-text("Entrecot")');
+  await allReady(kit);
   await pda.waitForSelector('text=listos para servir');
   await pda.click('button:has-text("Entregado en mesa")');
   await pda.waitForTimeout(500);
@@ -104,4 +116,5 @@ const OUT = process.argv[2];
   const caja = await admin.locator('.printable').textContent();
   console.log(JSON.stringify({ code, ticketHasTotal: /TOTAL/.test(ticket), ticket: ticket.slice(0, 400), caja: caja.slice(0, 300), errors }, null, 1));
   await browser.close();
+  if (errors.length) process.exit(1);
 })().catch(e => { console.error('FALLO:', e.message); process.exit(1); });

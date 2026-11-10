@@ -46,6 +46,10 @@ export default function Negocio() {
       <div className="card">
         <h3>Servicio</h3>
         <label className="check"><input type="checkbox" checked={!!f.settings.blockPaymentUntilDelivered} onChange={(e) => setting('blockPaymentUntilDelivered', e.target.checked)} /> No permitir cobrar con productos sin entregar</label>
+        <div className="grid cols-2 mt">
+          <label>Cocina y barra: aviso naranja a los (minutos)<input type="number" min={1} max={120} value={f.settings.kdsWarnMin ?? 10} onChange={(e) => setF({ ...f, settings: { ...f.settings, kdsWarnMin: Number(e.target.value) } })} /></label>
+          <label>Aviso rojo a los (minutos)<input type="number" min={2} max={240} value={f.settings.kdsLateMin ?? 20} onChange={(e) => setF({ ...f, settings: { ...f.settings, kdsLateMin: Number(e.target.value) } })} /></label>
+        </div>
       </div>
       <div className="card">
         <h3>Protección de datos</h3>

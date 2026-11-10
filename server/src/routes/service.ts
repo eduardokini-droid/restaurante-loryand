@@ -46,8 +46,18 @@ function itemsActor(req: FastifyRequest, status: string): Actor {
   const kitchenSide = ['preparing', 'ready'].includes(status);
   if (kitchenSide && (can(a, 'kitchen') || can(a, 'bar'))) return a;
   if (!kitchenSide && (a.kind === 'waiter' || can(a, 'tpv'))) return a;
-  if (status === 'new' && (can(a, 'kitchen') || can(a, 'bar'))) return a;
+  // Las pantallas de cocina y barra pueden volver a «nuevo» y marcar como entregado en el pase (solo sus propios platos).
+  if ((status === 'new' || status === 'delivered') && (can(a, 'kitchen') || can(a, 'bar'))) return a;
   throw forbidden();
+}
+
+/** Una pantalla de cocina o barra solo cambia los platos de su zona. */
+async function checkStation(a: Actor, est: string, itemIds: string[]) {
+  if (a.kind === 'waiter' || can(a, 'tpv')) return;
+  const rows = await sql`select distinct i.destination from order_items i join orders o on o.id = i.order_id where i.id in ${sql(itemIds)} and o.establishment_id = ${est}`;
+  for (const r of rows) {
+    if (!((r.destination === 'kitchen' && can(a, 'kitchen')) || (r.destination === 'bar' && can(a, 'bar')))) throw forbidden('Ese plato es de otra zona');
+  }
 }
 
 export default async function serviceRoutes(app: FastifyInstance) {
@@ -374,6 +384,7 @@ export default async function serviceRoutes(app: FastifyInstance) {
     }), req.body);
     const a = itemsActor(req, b.status);
     const est = establishmentOf(req);
+    await checkStation(a, est, b.itemIds);
     const touched = await setItemsStatus(est, b.itemIds, b.status);
     if (b.status === 'cancelled') await sql.begin((tx) => audit(tx, est, actorLabel(a), 'items.cancel', { itemIds: b.itemIds }));
     notify(est, ['orders', 'tables']);
@@ -457,5 +468,35 @@ export default async function serviceRoutes(app: FastifyInstance) {
       where o.establishment_id = ${est} and i.destination = ${destination} and i.status in ('new','preparing','ready')
       group by o.id, t.label, a.bar_name, w.name
       order by o.created_at`;
+  });
+
+  /**
+   * Tablero por columnas: en espera (pases retenidos), nuevos, preparando, listos y entregados en los últimos 30 minutos.
+   * El tiempo de cada plato cuenta desde que llegó a cocina (al pedirlo o al marchar su pase).
+   */
+  app.get('/api/kds/:destination/board', async (req) => {
+    const a = requireActor(req);
+    const { destination } = parse(z.object({ destination: z.enum(['kitchen', 'bar']) }), req.params);
+    if (!can(a, destination)) throw forbidden();
+    const est = establishmentOf(req);
+    const [e] = await sql`select settings from establishments where id = ${est}`;
+    const items = await sql`
+      select i.id, i.order_id, o.number, o.note, o.source, o.created_at as order_created_at,
+             coalesce('Mesa ' || t.label, 'Barra · ' || a.bar_name) as place, w.name as waiter_name,
+             i.name, i.option, i.qty, i.status, i.course, i.sent_at, i.status_at
+      from order_items i
+      join orders o on o.id = i.order_id
+      join accounts a on a.id = o.account_id
+      left join tables t on t.id = a.table_id
+      left join waiters w on w.id = o.waiter_id
+      where o.establishment_id = ${est} and i.destination = ${destination}
+        and (i.status in ('held', 'new', 'preparing', 'ready')
+             or (i.status in ('received', 'delivered') and i.status_at > now() - interval '30 minutes'))
+        and a.status <> 'cancelled'
+      order by coalesce(i.sent_at, o.created_at), o.number, i.course, i.name`;
+    return {
+      warnMin: Number(e.settings?.kdsWarnMin ?? 10), lateMin: Number(e.settings?.kdsLateMin ?? 20),
+      now: new Date().toISOString(), items,
+    };
   });
 }
