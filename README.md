@@ -123,6 +123,7 @@ node e2e/rgpd.cjs /tmp/capturas                # textos legales, consentimientos
 node e2e/facturacion.cjs /tmp/capturas         # plan, cuota por mesa, factura, remesa SEPA e incidencia (ejecutar al final)
 node e2e/venta-rapida.cjs /tmp/capturas        # logotipo, foto de producto y venta rápida con cambio y ticket
 node e2e/factura-qr.cjs /tmp/capturas          # logotipo y QR en el ticket; el cliente pide su factura desde el móvil
+node e2e/categorias.cjs /tmp/capturas          # crear, ordenar y renombrar categorías y subcategorías
 node e2e/cocina.cjs /tmp/capturas              # pantalla de cocina por columnas, colores por tiempo y pase marchado
 node e2e/informes.cjs /tmp/capturas            # informes de ventas y exportación a Excel (ejecutar al final)
 node e2e/seguridad.cjs /tmp/capturas           # doble verificación y enlace de recuperación (servidor con REQUIRE_GESTOR_2FA=true)
