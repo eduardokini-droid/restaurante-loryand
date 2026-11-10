@@ -111,7 +111,7 @@ export default async function authRoutes(app: FastifyInstance) {
     const a = requireActor(req);
     let establishment = null;
     if (a.establishmentId) {
-      const [e] = await sql`select id, slug, name, features, settings from establishments where id = ${a.establishmentId}`;
+      const [e] = await sql`select e.id, e.slug, e.name, e.features, e.settings, e.business_type, case when e.logo_image_id is null then null else '/api/img/' || e.logo_image_id end as logo_url from establishments e where e.id = ${a.establishmentId}`;
       establishment = e;
     }
     let shift = null;

@@ -36,6 +36,8 @@ El manual pedía al personal que vigilara a mano varias cosas. Ahora las garanti
 - **Arqueo y cierre de caja**: apertura con fondo, entradas y salidas de efectivo con motivo, apertura del cajón portamonedas desde la impresora (automática al cobrar en efectivo y manual registrada), recuento ciego por billetes y monedas, descuadre y **cierre Z** correlativo con IVA, tickets, descuentos, anulaciones y cobros por empleado. Los cobros hechos con la caja cerrada pasan a la siguiente caja. El cierre lo hace quien tiene «Ventas y caja».
 - **Informes de ventas**: por producto (unidades, importe, base sin IVA y % de ventas), por categoría, por día, por hora (gráfica), por camarero (comandado y cobrado) y por forma de pago, con periodos rápidos y **exportación a Excel** (CSV con punto y coma y decimales con coma). Cuenta lo cobrado en el periodo para que cuadre con la caja.
 - **Gestor general**: alta y desactivación de establecimientos, con un resumen de cuotas mensuales, pendiente de cobro e incidencias abiertas.
+- **Venta rápida en mostrador (TPV)**: pedido y cobro en un solo paso, sin mesa: productos con foto, «Más vendidos», efectivo con cálculo del cambio y billetes rápidos, tarjeta o Bizum, ticket automático y apertura del cajón. Lo de barra queda servido y lo de cocina llega a cocina; sin pases retenidos. Una doble pulsación nunca cobra dos veces.
+- **Logotipo y fotos**: logotipo del local (carta, reservas, tarjeta de cliente, panel y etiquetas de mesa) y fotos de productos subidas desde el móvil o el PC, que se reducen solas antes de subirlas y se guardan en el propio servidor. Tipo de negocio (bar, cafetería, restaurante…).
 - **Planes y funciones contratadas**: planes Básico, Profesional y Premium (editables, con precio por mesa y/o cuota fija). Cada local solo ve y usa lo que tiene contratado: TPV, cocina, barra, caja e informes, reservas, almacén, fidelización, carta QR, PDA de camareros, cobro online y WhatsApp; el servidor lo bloquea también. Configuración, mesas, personal, jornada, usuarios, protección de datos y copias van siempre incluidos.
 - **Cobro por mesa activa**: el programa anota cada día las mesas activas de cada local y la cuota del mes factura el **máximo de mesas activas del mes** (más la cuota fija, si la hay). Fecha de renovación con aviso.
 - **Domiciliación SEPA**: IBAN del cliente cifrado, referencia y fecha del mandato, identificador de acreedor calculado con el NIF, **fichero de remesa** de adeudos directos (pain.008, esquema CORE) para subir al banco, remesa cobrada y **recibos devueltos** (impagos), que vuelven a quedar pendientes para la siguiente remesa.
@@ -105,7 +107,7 @@ Direcciones: `/gestion` (panel), `/personal` (PDA), `/carta/<código-de-mesa>` (
 ## Pruebas
 
 ```bash
-npm test                    # 121 pruebas de integración contra PostgreSQL (base loryand_test)
+npm test                    # 125 pruebas de integración contra PostgreSQL (base loryand_test)
 node e2e/servicio-completo.cjs /tmp/capturas   # servicio completo en navegador real
 node e2e/fase2.cjs /tmp/capturas               # lista de espera, reservas, menú y factura completa
 node e2e/fase3.cjs /tmp/capturas               # plano, almacén, cupones, idiomas, copias y tarjeta
@@ -117,6 +119,7 @@ node e2e/jornada.cjs /tmp/capturas             # fichaje con pausa, corrección 
 node e2e/dividir.cjs /tmp/capturas             # cambiar de mesa y dividir la cuenta por productos
 node e2e/rgpd.cjs /tmp/capturas                # textos legales, consentimientos, exportación y baja del cliente
 node e2e/facturacion.cjs /tmp/capturas         # plan, cuota por mesa, factura, remesa SEPA e incidencia (ejecutar al final)
+node e2e/venta-rapida.cjs /tmp/capturas        # logotipo, foto de producto y venta rápida con cambio y ticket
 node e2e/informes.cjs /tmp/capturas            # informes de ventas y exportación a Excel (ejecutar al final)
 node e2e/seguridad.cjs /tmp/capturas           # doble verificación y enlace de recuperación (servidor con REQUIRE_GESTOR_2FA=true)
 ```

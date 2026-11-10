@@ -117,6 +117,9 @@ table.list th { font-size: .78rem; text-transform: uppercase; letter-spacing: .0
 .chip.on { background: var(--green); color: #fff; border-color: var(--green); }
 .product-btn { text-align: left; padding: .7rem; border-radius: 10px; border: 1px solid var(--line); background: var(--paper); cursor: pointer; min-height: 72px; display: flex; flex-direction: column; justify-content: space-between; }
 .product-btn:active { transform: scale(.98); }
+.product-btn.with-photo { padding: 0 0 .6rem; overflow: hidden; gap: .35rem; }
+.product-btn.with-photo img { width: 100%; height: 88px; object-fit: cover; display: block; }
+.product-btn.with-photo > strong, .product-btn.with-photo > span { padding: 0 .6rem; }
 .ticket-line { display: flex; justify-content: space-between; gap: .5rem; padding: .45rem 0; border-bottom: 1px dashed var(--line); }
 .qty { display: inline-flex; align-items: center; gap: .3rem; }
 .qty button { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--line); background: var(--paper); cursor: pointer; }
@@ -164,3 +167,7 @@ table.list th { font-size: .78rem; text-transform: uppercase; letter-spacing: .0
   background: rgba(255,255,255,.12); color: #fff; border: 1px solid rgba(255,255,255,.35); cursor: pointer; min-height: 32px; }
 .lang-btn.on { background: #fff; color: var(--green-dark); border-color: #fff; }
 .lang-btn span { font-size: 1rem; line-height: 1; }
+
+/* Logotipo del local en las páginas públicas. */
+.hero-title { display: flex; align-items: center; gap: .75rem; }
+.hero-logo { width: 56px; height: 56px; flex: none; object-fit: contain; background: #fff; border-radius: 12px; padding: 4px; }

@@ -206,7 +206,7 @@ export default async function reservationRoutes(app: FastifyInstance) {
   // ---------- Formulario público ----------
   app.get('/api/public/booking/:slug', async (req) => {
     const { slug } = parse(z.object({ slug: z.string().min(1).max(40) }), req.params);
-    const [e] = await sql`select id, name, address, city, phone from establishments where slug = ${slug} and active and 'reservations' = any(features)`;
+    const [e] = await sql`select e.id, e.name, e.address, e.city, e.phone, case when e.logo_image_id is null then null else '/api/img/' || e.logo_image_id end as logo_url from establishments e where e.slug = ${slug} and e.active and 'reservations' = any(e.features)`;
     if (!e) throw notFound('Establecimiento');
     const s = await settingsOf(sql, e.id);
     if (!s.publicEnabled) throw new AppError(403, 'booking_closed', 'Este establecimiento no acepta reservas en línea');
@@ -214,7 +214,7 @@ export default async function reservationRoutes(app: FastifyInstance) {
     const [wa] = await sql`select 1 from integrations where establishment_id = ${e.id} and kind = 'whatsapp' and enabled`;
     return {
       privacyNotice: legal.layers.reservation, whatsappNotice: wa ? legal.layers.whatsapp : null,
-      establishment: { name: e.name, address: e.address, city: e.city, phone: e.phone },
+      establishment: { name: e.name, address: e.address, city: e.city, phone: e.phone, logoUrl: e.logo_url },
       lunch: s.lunch, dinner: s.dinner, cancellationPolicy: s.cancellationPolicy, maxParty: s.maxPartyOnline,
       depositPerPersonCents: s.depositPerPersonCents, depositFromParty: s.depositFromParty,
     };

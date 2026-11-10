@@ -36,7 +36,7 @@ const OUT = process.argv[2];
 
   // 2. Contrato del local de demostración: plan Profesional (3 € por mesa), domiciliado.
   await g.click('button.chip:has-text("Clientes")');
-  const tables = (await g.locator('tr:has-text("Casa Demo") td:nth-child(3)').textContent()).match(/^\d+/)[0] * 1;
+  const tables = (await g.locator('tr:has-text("Casa Demo") td:nth-child(4)').textContent()).match(/^\d+/)[0] * 1;
   await g.click('tr:has-text("Casa Demo") button:has-text("Contrato")');
   await g.selectOption('.modal label:has-text("Plan") select', { label: 'Profesional' });
   await g.waitForSelector('.modal input[value="3,00"]');

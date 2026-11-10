@@ -12,7 +12,8 @@ import { Modal } from './ui';
 type View =
   | { kind: 'floor' }
   | { kind: 'table'; tableId: string; accountId: string | null; ordering: boolean }
-  | { kind: 'bar'; accountId: string | null; barName: string; waiterId?: string; ordering: boolean };
+  | { kind: 'bar'; accountId: string | null; barName: string; waiterId?: string; ordering: boolean }
+  | { kind: 'quick' };
 
 /** Pantalla de servicio común al TPV y a la PDA: plano → mesa o cliente de barra → comanda / cuenta. */
 export function ServiceScreen({ mode }: { mode: 'tpv' | 'pda' }) {
@@ -47,6 +48,15 @@ export function ServiceScreen({ mode }: { mode: 'tpv' | 'pda' }) {
     );
   }
 
+  if (view.kind === 'quick') {
+    return (
+      <div className="stack">
+        <button className="btn ghost small" onClick={() => setView({ kind: 'floor' })}>← Volver a la sala</button>
+        <OrderBuilder quick target={{ barName: 'Venta rápida' }} targetLabel="Mostrador" onSent={() => reload()} />
+      </div>
+    );
+  }
+
   if (view.kind === 'bar') {
     const label = `Barra · ${view.barName}`;
     return (
@@ -76,6 +86,7 @@ export function ServiceScreen({ mode }: { mode: 'tpv' | 'pda' }) {
       <div className="spread">
         <h2 style={{ margin: 0 }}>¿Dónde vas a atender?</h2>
         <span className="row">
+          {mode === 'tpv' && <button className="btn primary" onClick={() => setView({ kind: 'quick' })}>Venta rápida</button>}
           {mode === 'tpv' && <button className="btn" onClick={() => setCash(true)}>Caja</button>}
           {mode === 'tpv' && <button className="btn" onClick={() => setAccess(true)}>Acceso camareros</button>}
           <button className="btn terra" onClick={() => setNewBar(true)}>+ Cliente de barra</button>

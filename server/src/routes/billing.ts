@@ -77,7 +77,10 @@ export default async function billingRoutes(app: FastifyInstance) {
   app.get('/api/platform/clients', async (req) => {
     requireSuper(req);
     return sql`
-      select e.id, e.slug, e.name, e.legal_name, e.tax_id, e.email, e.phone, e.features, e.active, e.created_at,
+      select e.id, e.slug, e.name, e.legal_name, e.tax_id, e.email, e.phone, e.features, e.active, e.created_at, e.business_type,
+             case when e.logo_image_id is null then null else '/api/img/' || e.logo_image_id end as logo_url,
+             (select count(*)::int from orders o where o.establishment_id = e.id and o.created_at > now() - interval '30 days') as orders_30d,
+             (select coalesce(sum(p.amount_cents), 0)::int from payments p where p.establishment_id = e.id and p.created_at > now() - interval '30 days') as sales_30d,
              (select count(*)::int from tables t where t.establishment_id = e.id and t.active) as active_tables,
              c.plan_name, c.plan_id, c.monthly_cents, c.price_per_table_cents, c.vat_rate, to_char(c.start_date, 'YYYY-MM-DD') as start_date,
              to_char(c.renewal_date, 'YYYY-MM-DD') as renewal_date, c.status as contract_status, c.payment_method,

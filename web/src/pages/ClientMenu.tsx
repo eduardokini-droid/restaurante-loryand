@@ -9,7 +9,7 @@ import { LANGS, allergenName, t as tt, trCategory, trProduct, type Lang } from '
 import { LegalLinks } from './Legal';
 
 interface P { id: string; name: string; description: string; price_cents: number; options: string[]; allergens: string[]; category_id: string | null; subcategory_id: string | null; photo_url: string | null; translations?: Record<string, { name?: string; description?: string }> }
-interface Data { establishment: string; slug?: string; table: { label: string; accessOpen: boolean }; categories: { id: string; parent_id: string | null; name: string; translations?: Record<string, string> }[]; products: P[]; dailyMenu: DailyMenu | null; onlinePayment?: boolean }
+interface Data { establishment: string; slug?: string; logoUrl?: string | null; table: { label: string; accessOpen: boolean }; categories: { id: string; parent_id: string | null; name: string; translations?: Record<string, string> }[]; products: P[]; dailyMenu: DailyMenu | null; onlinePayment?: boolean }
 interface Line { key: string; p: P; option: string | null; qty: number; menu?: Record<string, string> }
 
 const FLAG: Record<Lang, string> = { es: '🇪🇸', en: '🇬🇧', fr: '🇫🇷', de: '🇩🇪', it: '🇮🇹', pt: '🇵🇹', ru: '🇷🇺' };
@@ -101,7 +101,7 @@ export default function ClientMenu() {
           ))}
         </div>
         <span className="small" style={{ opacity: .85 }}>{tt('table', lang)} {data.table.label}</span>
-        <h1 style={{ margin: 0 }}>{data.establishment}</h1>
+        <div className="hero-title">{data.logoUrl && <img src={data.logoUrl} alt="" className="hero-logo" />}<h1 style={{ margin: 0 }}>{data.establishment}</h1></div>
         <div className="row mt" style={{ gap: '.4rem' }}>
           <button className={`chip ${view === 'menu' ? 'on' : ''}`} onClick={() => setView('menu')}>{tt('menu', lang)}</button>
           <button className={`chip ${view === 'account' ? 'on' : ''}`} onClick={() => withCode(() => { loadAccount(); setView('account'); })}>{tt('myOrder', lang)}</button>

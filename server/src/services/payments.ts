@@ -41,6 +41,8 @@ export function splitAmount(s: { items: Array<{ id: string; unitCents: number; q
 export interface PaymentOptions {
   /** Cobro confirmado por el banco: el dinero ya está cobrado, no se bloquea por platos sin entregar ni por el QR en curso. */
   bankConfirmed?: boolean;
+  /** Venta rápida en mostrador: se cobra al pedir, antes de que cocina sirva. */
+  counterSale?: boolean;
 }
 
 export async function registerPayment(
@@ -82,7 +84,7 @@ export async function registerPayment(
         if (!it) throw badRequest('Uno de los productos no pertenece a esta cuenta o está anulado');
         if (it.parentItemId) throw badRequest('Los platos de un menú se pagan con el menú completo');
         if (qty > it.qty - it.paidQty) throw conflict('already_paid', `De «${it.name}» solo quedan ${it.qty - it.paidQty} por pagar`);
-        if (!opts.bankConfirmed && est.settings?.blockPaymentUntilDelivered && it.destination !== 'none' && it.status !== 'delivered') {
+        if (!opts.bankConfirmed && !opts.counterSale && est.settings?.blockPaymentUntilDelivered && it.destination !== 'none' && it.status !== 'delivered') {
           throw conflict('items_pending', `«${it.name}» aún no se ha entregado`);
         }
         sel.push({ itemId, qty, amountCents: 0 });
@@ -99,7 +101,7 @@ export async function registerPayment(
         left -= part;
         return { ...x, amountCents: part };
       });
-    } else if (!opts.bankConfirmed && est.settings?.blockPaymentUntilDelivered && s.undeliveredCount > 0) {
+    } else if (!opts.bankConfirmed && !opts.counterSale && est.settings?.blockPaymentUntilDelivered && s.undeliveredCount > 0) {
       throw conflict('items_pending', `Quedan ${s.undeliveredCount} producto(s) sin entregar. Márcalos como entregados antes de cobrar.`);
     }
     if (input.amountCents > s.pendingCents) {

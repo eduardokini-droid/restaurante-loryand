@@ -3,6 +3,7 @@ import { api, setSelectedEstablishment } from '../lib/api';
 import { money, toCents } from '../lib/format';
 import { useSession } from '../lib/session';
 import { ErrorText, Modal, useAction, useToast } from '../components/ui';
+import { BUSINESS_TYPE } from './Negocio';
 
 type Tab = 'clientes' | 'planes' | 'facturas' | 'incidencias' | 'emisor';
 const TABS: [Tab, string][] = [['clientes', 'Clientes'], ['planes', 'Planes'], ['facturas', 'Facturas y remesas'], ['incidencias', 'Incidencias'], ['emisor', 'Datos de facturación']];
@@ -69,12 +70,16 @@ function Clientes({ onChange }: { onChange: () => void }) {
       <ErrorText error={error} />
       <div className="card" style={{ overflowX: 'auto' }}>
         <table className="list">
-          <thead><tr><th>Establecimiento</th><th>Plan</th><th className="right">Mesas</th><th className="right">Cuota estimada</th><th className="right">Pendiente</th><th className="right">Incid.</th><th></th></tr></thead>
+          <thead><tr><th>Establecimiento</th><th>Plan</th><th className="right">Pedidos 30 d</th><th className="right">Mesas</th><th className="right">Cuota estimada</th><th className="right">Pendiente</th><th className="right">Incid.</th><th></th></tr></thead>
           <tbody>{list.map((e) => (
             <tr key={e.id} style={e.active ? undefined : { opacity: .55 }}>
-              <td style={{ minWidth: 180 }}><strong>{e.name}</strong><div className="small muted"><code>{e.slug}</code> · {e.active_tables} mesas{!e.active && ' · desactivado'}</div></td>
+              <td style={{ minWidth: 200 }}><div style={{ display: 'flex', gap: '.6rem', alignItems: 'center' }}>
+                <div style={{ width: 40, height: 40, flex: 'none', borderRadius: 8, border: '1px solid var(--line)', background: '#fff', display: 'grid', placeItems: 'center', overflow: 'hidden' }}>
+                  {e.logo_url ? <img src={e.logo_url} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} /> : <span className="small muted">{e.name.slice(0, 1)}</span>}</div>
+                <div><strong>{e.name}</strong><div className="small muted">{BUSINESS_TYPE[e.business_type] ?? ''} · <code>{e.slug}</code>{!e.active && ' · desactivado'}</div></div></div></td>
               <td>{e.plan_name ? <>{e.plan_name}<div className="small muted">{CONTRACT_STATUS[e.contract_status]} · {PAY_METHOD[e.payment_method]}{e.payment_method === 'direct_debit' && !(e.iban_last4 && e.mandate_ref) && ' (falta mandato)'}</div>
                 {e.renewal_date && <Renewal date={e.renewal_date} />}</> : <span className="badge grey">Sin contrato</span>}</td>
+              <td className="right">{e.orders_30d}<div className="small muted">{money(e.sales_30d)} vendidos</div></td>
               <td className="right">{e.active_tables}<div className="small muted">máx. mes {e.max_tables_month}</div></td>
               <td className="right">{e.plan_name ? money(e.monthly_cents + e.price_per_table_cents * Math.max(e.active_tables, e.max_tables_month)) : '—'}{e.plan_name && <div className="small muted">+ IVA{e.price_per_table_cents > 0 && ` · ${money(e.price_per_table_cents)}/mesa`}</div>}</td>
               <td className="right">{e.pending_cents ? money(e.pending_cents) : '—'}{e.overdue > 0 && <div><span className="badge danger">{e.overdue} vencida{e.overdue > 1 ? 's' : ''}</span></div>}{e.returned > 0 && <div><span className="badge danger">{e.returned} devuelto{e.returned > 1 ? 's' : ''}</span></div>}</td>

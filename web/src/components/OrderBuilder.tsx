@@ -4,10 +4,11 @@ import { money, ALLERGENS } from '../lib/format';
 import { sendOrder } from '../lib/queue';
 import { ErrorText, Modal, useAction, useToast } from './ui';
 import { t, type Lang } from '../lib/i18n';
+import { DocumentPrint } from './DocumentPrint';
 
 export interface MenuProduct {
   id: string; name: string; description: string; price_cents: number; destination: 'kitchen' | 'bar';
-  course: number; visible: boolean; options: string[]; allergens: string[]; category_id: string | null; subcategory_id: string | null;
+  course: number; visible: boolean; options: string[]; allergens: string[]; category_id: string | null; subcategory_id: string | null; photo_url?: string | null;
 }
 interface Category { id: string; parent_id: string | null; name: string }
 interface Line { key: string; product: MenuProduct; option: string | null; qty: number; menu?: Record<string, string> }
@@ -18,8 +19,10 @@ export type OrderTarget = { tableId: string } | { accountId: string } | { barNam
 
 const COURSE_LABEL = ['', '1.º pase', '2.º pase', '3.º pase', '4.º pase', '5.º pase'];
 
-export function OrderBuilder({ target, targetLabel, extraBody, onSent }: {
+export function OrderBuilder({ target, targetLabel, extraBody, onSent, quick = false }: {
   target: OrderTarget; targetLabel: string; extraBody?: Record<string, unknown>; onSent: (accountId: string | null) => void;
+  /** Venta rápida: se cobra al momento, sin mesa ni cuenta abierta. */
+  quick?: boolean;
 }) {
   const [menu, setMenu] = useState<{ categories: Category[]; products: MenuProduct[]; bestSellers: string[]; dailyMenu: DailyMenu | null } | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -31,6 +34,10 @@ export function OrderBuilder({ target, targetLabel, extraBody, onSent }: {
   const [note, setNote] = useState('');
   // El identificador se genera al empezar la comanda y se mantiene en los reintentos: así nunca se duplica.
   const [requestId, setRequestId] = useState(newRequestId);
+  const [method, setMethod] = useState<'cash' | 'card' | 'bizum'>('cash');
+  const [tendered, setTendered] = useState('');
+  const [sold, setSold] = useState<{ total: number; change: number | null; documentId: string | null; number: number } | null>(null);
+  const [ticket, setTicket] = useState<string | null>(null);
   const { busy, error, run } = useAction();
   const toast = useToast();
 
@@ -62,8 +69,19 @@ export function OrderBuilder({ target, targetLabel, extraBody, onSent }: {
   };
   const setQty = (key: string, qty: number) => setLines((ls) => qty <= 0 ? ls.filter((l) => l.key !== key) : ls.map((l) => l.key === key ? { ...l, qty } : l));
   const total = lines.reduce((s, l) => s + l.product.price_cents * l.qty, 0);
-  const courses = [...new Set(lines.map((l) => l.product.course))].sort();
+  const courses = quick ? [1] : [...new Set(lines.map((l) => l.product.course))].sort();
 
+  const tenderedCents = Math.round(Number(tendered.replace(',', '.')) * 100) || 0;
+  const charge = () => run(async () => {
+    if (method === 'cash' && tendered && tenderedCents < total) throw new Error('Lo entregado es menos que el total');
+    const r = await api<any>('/api/service/quick-sale', { body: {
+      clientRequestId: requestId, note, method, tenderedCents: method === 'cash' && tenderedCents ? tenderedCents : null,
+      items: lines.flatMap<object>((l) => l.menu ? Array.from({ length: l.qty }, () => ({ menu: l.menu })) : [{ productId: l.product.id, qty: l.qty, option: l.option }]),
+    } });
+    setSold({ total: r.totalCents, change: r.changeCents, documentId: r.documentId, number: r.orderNumber });
+    setLines([]); setNote(''); setTendered(''); setMethod('cash'); setRequestId(newRequestId());
+    onSent(null);
+  });
   const send = () => run(async () => {
     const body = {
       clientRequestId: requestId, target, note, ...extraBody,
@@ -99,7 +117,8 @@ export function OrderBuilder({ target, targetLabel, extraBody, onSent }: {
         )}
         <div className="grid tiles">
           {shown.map((p) => (
-            <button key={p.id} className="product-btn" onClick={() => pick(p)}>
+            <button key={p.id} className={`product-btn ${p.photo_url ? 'with-photo' : ''}`} onClick={() => pick(p)}>
+              {p.photo_url && <img src={p.photo_url} alt="" loading="lazy" />}
               <strong>{p.name}</strong>
               <span className="spread small">
                 <span>{money(p.price_cents)}</span>
@@ -115,12 +134,19 @@ export function OrderBuilder({ target, targetLabel, extraBody, onSent }: {
       </div>
 
       <div className="card stack" style={{ position: 'sticky', top: '1rem' }}>
-        <div className="spread"><h3 style={{ margin: 0 }}>Comanda</h3><span className="badge">{targetLabel}</span></div>
+        <div className="spread"><h3 style={{ margin: 0 }}>{quick ? 'Venta rápida' : 'Comanda'}</h3><span className="badge">{targetLabel}</span></div>
+        {sold && lines.length === 0 && (
+          <div className="notice ok">
+            <strong>Cobrado {money(sold.total)}</strong> · pedido n.º {sold.number}
+            {sold.change != null && sold.change > 0 && <div style={{ fontSize: '1.4rem', fontWeight: 800, marginTop: '.2rem' }}>Cambio: {money(sold.change)}</div>}
+            {sold.documentId && <button className="btn small mt" onClick={() => setTicket(sold.documentId)}>Ver ticket</button>}
+          </div>
+        )}
         {lines.length === 0 && <p className="muted small">Pulsa un producto para añadirlo.</p>}
         {courses.map((c) => (
           <div key={c}>
             {courses.length > 1 && <div className="small muted" style={{ marginTop: '.4rem' }}>{COURSE_LABEL[c]}{c !== courses[0] && ' · se retiene hasta «Marchar»'}</div>}
-            {lines.filter((l) => l.product.course === c).map((l) => (
+            {lines.filter((l) => quick || l.product.course === c).map((l) => (
               <div key={l.key} className="ticket-line">
                 <div>
                   <div>{l.product.name}</div>
@@ -137,13 +163,30 @@ export function OrderBuilder({ target, targetLabel, extraBody, onSent }: {
           </div>
         ))}
         <input placeholder="Nota para cocina/barra (opcional)" value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} />
-        <div className="spread"><strong>Total comanda</strong><strong>{money(total)}</strong></div>
+        <div className="spread"><strong>Total{quick ? '' : ' comanda'}</strong><strong style={quick ? { fontSize: '1.5rem' } : undefined}>{money(total)}</strong></div>
+        {quick && lines.length > 0 && <>
+          <div className="row" role="group" aria-label="Forma de pago" style={{ gap: '.3rem' }}>
+            {([['cash', 'Efectivo'], ['card', 'Tarjeta'], ['bizum', 'Bizum']] as const).map(([k, l]) => <button key={k} className={`chip ${method === k ? 'on' : ''}`} onClick={() => setMethod(k)}>{l}</button>)}
+          </div>
+          {method === 'cash' && <>
+            <label style={{ margin: 0 }}>Entrega el cliente (opcional)<input inputMode="decimal" value={tendered} onChange={(e) => setTendered(e.target.value)} placeholder="0,00" /></label>
+            <div className="row" style={{ gap: '.3rem' }}>{[5, 10, 20, 50].filter((v) => v * 100 >= total).map((v) => <button key={v} className="chip" onClick={() => setTendered(String(v))}>{v} €</button>)}</div>
+            {tenderedCents >= total && tenderedCents > 0 && <div className="spread"><span>Cambio</span><strong style={{ fontSize: '1.3rem' }}>{money(tenderedCents - total)}</strong></div>}
+          </>}
+        </>}
         <ErrorText error={error} />
-        <button className="btn primary block" disabled={!lines.length || busy} onClick={send}>
-          {busy ? 'Enviando…' : 'Enviar comanda'}
-        </button>
+        {quick ? (
+          <button className="btn primary block" style={{ fontSize: '1.15rem', padding: '.9rem' }} disabled={!lines.length || busy} onClick={charge}>
+            {busy ? 'Cobrando…' : `Cobrar ${money(total)}`}
+          </button>
+        ) : (
+          <button className="btn primary block" disabled={!lines.length || busy} onClick={send}>
+            {busy ? 'Enviando…' : 'Enviar comanda'}
+          </button>
+        )}
       </div>
 
+      {ticket && <DocumentPrint id={ticket} onClose={() => setTicket(null)} />}
       {menuOpen && menu.dailyMenu && <MenuChooser menu={menu.dailyMenu} onClose={() => setMenuOpen(false)} onAdd={(c) => { addMenu(c); setMenuOpen(false); }} />}
       {choosing && (
         <Modal title={choosing.name} onClose={() => setChoosing(null)}>

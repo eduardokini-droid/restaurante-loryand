@@ -3,6 +3,7 @@ import { api } from '../lib/api';
 import { ALLERGENS, money, toCents } from '../lib/format';
 import { ErrorText, Modal, useAction, useToast } from '../components/ui';
 import { LANGS } from '../lib/i18n';
+import { uploadImage } from '../lib/images';
 
 interface Category { id: string; parent_id: string | null; name: string; sort: number }
 interface Product {
@@ -109,6 +110,13 @@ function ProductForm({ product, cats, onClose, onSaved }: { product: Product | n
   const doneLangs = LANGS.filter(([k]) => k !== 'es' && tr[k]?.name).length;
   const autoTranslate = () => run(async () => { const p = await api(`/api/admin/products/${product!.id}/translate`, { body: {} }); setTr(p.translations); toast('Traducido a 6 idiomas. Revisa ingredientes y nombres comerciales.'); });
   const subs = cats.filter((c) => c.parent_id === f.categoryId && f.categoryId);
+  const [uploading, setUploading] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const pickPhoto = async (file: File | undefined) => {
+    if (!file) return;
+    setUploading(true); setPhotoError(null);
+    try { set('photoUrl', (await uploadImage(file, 'product')).url); } catch (e) { setPhotoError((e as Error).message); } finally { setUploading(false); }
+  };
 
   const save = () => run(async () => {
     const priceCents = toCents(f.price);
@@ -155,7 +163,16 @@ function ProductForm({ product, cats, onClose, onSaved }: { product: Product | n
           ))}
         </div>
       </fieldset>
-      <label>URL de la foto (opcional)<input value={f.photoUrl} onChange={(e) => set('photoUrl', e.target.value)} placeholder="https://…" /></label>
+      <div className="row" style={{ alignItems: 'center' }}>
+        <div style={{ width: 84, height: 84, borderRadius: 10, overflow: 'hidden', background: 'var(--paper)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center', flex: 'none' }}>
+          {f.photoUrl ? <img src={f.photoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span className="small muted">Sin foto</span>}
+        </div>
+        <label className="btn" style={{ margin: 0 }}>{uploading ? 'Subiendo…' : f.photoUrl ? 'Cambiar foto' : 'Subir foto'}
+          <input type="file" accept="image/*" hidden disabled={uploading} onChange={(e) => { pickPhoto(e.target.files?.[0]); e.target.value = ''; }} /></label>
+        {f.photoUrl && <button type="button" className="btn ghost small" onClick={() => set('photoUrl', '')}>Quitar</button>}
+      </div>
+      <ErrorText error={photoError} />
+      <p className="small muted" style={{ marginTop: '-.3rem' }}>La foto se ve en el TPV y en la carta del cliente. Puedes hacerla con el móvil: se reduce sola.</p>
       <details className="card" style={{ marginBottom: '.75rem' }}>
         <summary><strong>Traducciones del producto</strong> <span className="small muted">({doneLangs} de 6 idiomas)</span></summary>
         <div className="chips mt">{LANGS.filter(([k]) => k !== 'es').map(([k, l]) => <button key={k} className={`chip ${lang === k ? 'on' : ''}`} onClick={() => setLang(k)}>{l}{tr[k]?.name ? ' ✓' : ''}</button>)}</div>

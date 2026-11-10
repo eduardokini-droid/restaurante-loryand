@@ -235,13 +235,13 @@ export default async function loyaltyRoutes(app: FastifyInstance) {
   // ---------- Tarjeta digital pública ----------
   app.get('/api/public/card/:token', async (req) => {
     const { token } = parse(z.object({ token: z.string().regex(/^[a-f0-9]{24}$/) }), req.params);
-    const [c] = await sql`select c.id, c.name, c.points, c.marketing_consent, e.name as establishment, e.slug from customers c join establishments e on e.id = c.establishment_id
+    const [c] = await sql`select c.id, c.name, c.points, c.marketing_consent, e.name as establishment, e.slug, case when e.logo_image_id is null then null else '/api/img/' || e.logo_image_id end as logo_url from customers c join establishments e on e.id = c.establishment_id
                           where c.card_token = ${token} and e.active`;
     if (!c) throw notFound('Tarjeta');
     const coupons = await sql`select code, description, kind, value, valid_until from coupons
                               where customer_id = ${c.id} and active and (max_uses is null or uses < max_uses)
                                 and (valid_until is null or valid_until >= current_date) order by created_at desc`;
-    return { establishment: c.establishment, slug: c.slug, name: c.name.split(' ')[0], points: c.points, marketingConsent: c.marketing_consent, coupons };
+    return { establishment: c.establishment, slug: c.slug, logoUrl: c.logo_url, name: c.name.split(' ')[0], points: c.points, marketingConsent: c.marketing_consent, coupons };
   });
 
   /** Desde su tarjeta, el cliente deja de recibir ofertas o se da de baja del programa (sus datos se suprimen). */

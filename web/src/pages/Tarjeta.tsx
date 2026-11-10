@@ -29,7 +29,7 @@ export default function Tarjeta() {
   if (!d) return <p className="muted" style={{ padding: '2rem' }}>Cargando…</p>;
   return (
     <div>
-      <div className="hero"><div className="small" style={{ opacity: .85 }}>Tarjeta de cliente</div><h1 style={{ margin: 0 }}>{d.establishment}</h1></div>
+      <div className="hero"><div className="small" style={{ opacity: .85 }}>Tarjeta de cliente</div><div className="hero-title">{d.logoUrl && <img src={d.logoUrl} alt="" className="hero-logo" />}<h1 style={{ margin: 0 }}>{d.establishment}</h1></div></div>
       <div style={{ padding: '1rem', maxWidth: 480, margin: '0 auto' }} className="stack">
         <div className="card" style={{ textAlign: 'center' }}><div className="muted">Hola, {d.name}</div><div style={{ fontSize: '3rem', fontWeight: 800, color: 'var(--green)' }}>{d.points}</div><div>puntos</div></div>
         <h2>Tus cupones</h2>

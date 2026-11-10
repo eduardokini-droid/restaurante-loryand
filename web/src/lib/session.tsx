@@ -3,7 +3,7 @@ import { api, ApiError } from './api';
 
 export interface Me {
   actor: { kind: 'user' | 'waiter'; id: string; name: string; role?: 'superadmin' | 'admin' | 'staff'; establishmentId: string | null; code?: number };
-  establishment: { id: string; slug: string; name: string; features: string[]; settings: Record<string, boolean> } | null;
+  establishment: { id: string; slug: string; name: string; features: string[]; settings: Record<string, boolean>; business_type?: string; logo_url?: string | null } | null;
   shift: { id: string; started_at: string; break_since?: string | null } | null;
   modules: string[];
   onlinePayment?: boolean;

@@ -78,8 +78,8 @@ function QrLabels({ tables, onClose }: { tables: Table[]; onClose: () => void })
   const chosen = tables.filter((t) => selected.includes(t.id) && images[t.id]);
   const html = useMemo(() => labelsHtml(
     chosen.flatMap((t) => Array.from({ length: copies }, () => ({ table: t.label, qr: images[t.id] }))),
-    { establishment: name || 'Mi restaurante', tagline, cropMarks: marks },
-  ), [chosen, copies, images, name, tagline, marks]);
+    { establishment: name || 'Mi restaurante', tagline, cropMarks: marks, logoUrl: me?.establishment?.logo_url ? `${location.origin}${me.establishment.logo_url}` : null },
+  ), [chosen, copies, images, name, tagline, marks, me?.establishment?.logo_url]);
   const sheets = Math.ceil((chosen.length * copies) / 8);
   const saveTagline = () => run(async () => {
     if (tagline === ((me?.establishment?.settings as Record<string, unknown> | undefined)?.labelTagline ?? '')) return;

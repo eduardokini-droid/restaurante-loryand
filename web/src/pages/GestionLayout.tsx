@@ -72,7 +72,9 @@ export default function GestionLayout() {
   return (
     <div className="shell">
       <nav className="side">
-        <div className="brand">LORYAND<small>{me.establishment?.name ?? 'Gestor general'}</small></div>
+        <div className="brand">
+          {me.establishment?.logo_url && <img src={me.establishment.logo_url} alt="" style={{ width: 56, height: 56, objectFit: 'contain', background: '#fff', borderRadius: 10, padding: 4, display: 'block', marginBottom: '.5rem' }} />}
+          LORYAND<small>{me.establishment?.name ?? 'Gestor general'}</small></div>
         {nav.map((n) => <NavLink key={n.to} to={`/gestion/${n.to}`}>{n.label}</NavLink>)}
         <div className="foot">
           {me.actor.name}<br />

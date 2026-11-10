@@ -196,6 +196,59 @@ export default async function serviceRoutes(app: FastifyInstance) {
     return r;
   });
 
+  /**
+   * Venta rápida en mostrador (TPV): pedido y cobro en un solo paso, sin mesa ni cliente de barra.
+   * Lo de barra se da por servido; lo de cocina sigue apareciendo en cocina hasta que se entregue.
+   * Repetible: el mismo identificador de pedido nunca crea ni cobra dos veces.
+   */
+  app.post('/api/service/quick-sale', async (req) => {
+    const a = requireActor(req);
+    if (!can(a, 'tpv')) throw forbidden('La venta rápida se hace desde el TPV');
+    const est = establishmentOf(req);
+    const b = parse(z.object({
+      clientRequestId: orderInput.shape.clientRequestId, items: orderInput.shape.items, note: orderInput.shape.note,
+      method: z.enum(['cash', 'card', 'bizum']), tenderedCents: z.number().int().positive().nullish(),
+      customerName: z.string().trim().max(40).optional(),
+    }), req.body);
+    const [dup] = await sql`select account_id, number from orders where establishment_id = ${est} and client_request_id = ${b.clientRequestId}`;
+    let accountId: string = dup?.account_id;
+    let orderNumber: number = dup?.number;
+    if (!dup) {
+      const label = b.customerName || `Venta rápida ${b.clientRequestId.replace(/[^a-z0-9]/gi, '').slice(-4).toUpperCase()}`;
+      const [acc] = await sql`insert into accounts (establishment_id, bar_name) values (${est}, ${label}) returning id`;
+      accountId = acc.id;
+      try {
+        // En mostrador no hay pases: todo sale a la vez.
+        const items = b.items.map((i) => ('productId' in i ? { ...i, course: 1 } : i));
+        const r = await createOrder({ clientRequestId: b.clientRequestId, target: { accountId }, items, note: b.note },
+          { establishmentId: est, source: 'tpv', waiterId: null, userId: a.kind === 'user' ? a.id : null });
+        if (r.duplicate) { // otro dispositivo lo registró a la vez: se usa ese y se descarta esta cuenta vacía
+          await sql`update accounts set status = 'cancelled', closed_at = now() where id = ${accountId}`;
+          accountId = r.accountId; orderNumber = r.number;
+        } else {
+          orderNumber = r.number;
+          // Lo de barra se entrega en el momento, en el mostrador.
+          await sql`update order_items set status = 'delivered' where order_id = ${r.orderId} and destination = 'bar' and status in ('new', 'held')`;
+          await printOrder(est, r.orderId).catch((err) => req.log.error({ err }, 'Error al preparar la comanda impresa'));
+        }
+      } catch (e) {
+        await sql`update accounts set status = 'cancelled', closed_at = now() where id = ${accountId} and status = 'open'`;
+        throw e;
+      }
+    }
+    const s = await accountSummary(sql, accountId, est);
+    const pay = await registerPayment(est, accountId, {
+      idempotencyKey: `qs-${b.clientRequestId}`, method: b.method, amountCents: Math.max(s.pendingCents, 1), tenderedCents: b.tenderedCents ?? null,
+    }, who(a), { counterSale: true });
+    if (!pay.duplicate) {
+      notify(est, ['orders', 'payments', 'tables']);
+      for (const d of pay.documentIds ?? (pay.documentId ? [pay.documentId] : [])) await autoPrintTicket(est, d).catch((err) => req.log.error({ err }, 'Error al preparar el ticket impreso'));
+      if (b.method === 'cash') await autoOpenDrawer(est).catch((err) => req.log.error({ err }, 'Error al abrir el cajón'));
+      await sql.begin((tx) => audit(tx, est, actorLabel(a), 'quick_sale', { accountId, orderNumber, method: b.method, cents: s.pendingCents }));
+    }
+    return { ...pay, accountId, orderNumber, totalCents: s.totalCents };
+  });
+
   /** "Marchar ahora": envía a cocina/barra el siguiente pase retenido. */
   app.post('/api/service/accounts/:id/fire', async (req) => {
     const a = requireService(req);

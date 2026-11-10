@@ -20,6 +20,9 @@ export function splitOptions(v: string | string[]): string[] {
   return [...new Set(parts.map((s) => s.trim()).filter(Boolean))].slice(0, 30);
 }
 
+/** Foto de producto: una imagen subida al propio servidor o una dirección https. */
+const photoUrl = z.string().max(500).refine((v) => /^\/api\/img\/[0-9a-f-]{36}$/.test(v) || /^https:\/\//.test(v), 'La foto debe ser una imagen subida o una dirección https');
+
 const establishmentSchema = z.object({
   name: z.string().min(1).max(120),
   legalName: z.string().max(160),
@@ -30,6 +33,7 @@ const establishmentSchema = z.object({
   postalCode: z.string().max(10),
   city: z.string().max(80),
   province: z.string().max(80),
+  businessType: z.enum(['restaurant', 'bar', 'cafe', 'pub', 'bakery', 'icecream', 'other']),
   settings: z.object({
     sharedTables: z.boolean(),
     blockPaymentUntilDelivered: z.boolean(),
@@ -56,7 +60,7 @@ const productSchema = z.object({
   allergens: z.array(z.enum(ALLERGENS)).default([]),
   categoryId: z.string().uuid().nullable().default(null),
   subcategoryId: z.string().uuid().nullable().default(null),
-  photoUrl: z.string().url().max(500).nullable().default(null),
+  photoUrl: photoUrl.nullable().default(null),
   translations: z.partialRecord(z.enum(LANGS), z.object({ name: z.string().max(120).default(''), description: z.string().max(600).default('') })).optional(),
 });
 
@@ -73,7 +77,7 @@ const productEdit = z.object({
   allergens: z.array(z.enum(ALLERGENS)),
   categoryId: z.string().uuid().nullable(),
   subcategoryId: z.string().uuid().nullable(),
-  photoUrl: z.string().url().max(500).nullable(),
+  photoUrl: photoUrl.nullable(),
   translations: z.partialRecord(z.enum(LANGS), z.object({ name: z.string().max(120).default(''), description: z.string().max(600).default('') })),
 }).partial();
 
@@ -116,7 +120,7 @@ export default async function adminRoutes(app: FastifyInstance) {
     const est = establishmentOf(req);
     const b = parse(establishmentSchema, req.body);
     const cols: Record<string, unknown> = {};
-    const map: Record<string, string> = { name: 'name', legalName: 'legal_name', taxId: 'tax_id', phone: 'phone', email: 'email', address: 'address', postalCode: 'postal_code', city: 'city', province: 'province' };
+    const map: Record<string, string> = { businessType: 'business_type', name: 'name', legalName: 'legal_name', taxId: 'tax_id', phone: 'phone', email: 'email', address: 'address', postalCode: 'postal_code', city: 'city', province: 'province' };
     for (const [k, c] of Object.entries(map)) if (b[k as keyof typeof b] !== undefined) cols[c] = b[k as keyof typeof b];
     await sql.begin(async (tx) => {
       if (Object.keys(cols).length) await tx`update establishments set ${tx(cols)} where id = ${est}`;

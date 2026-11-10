@@ -31,7 +31,7 @@ export default function Reservar() {
 
   return (
     <div>
-      <div className="hero"><div className="small" style={{ opacity: .85 }}>Reservar mesa</div><h1 style={{ margin: 0 }}>{info.establishment.name}</h1>
+      <div className="hero"><div className="small" style={{ opacity: .85 }}>Reservar mesa</div><div className="hero-title">{info.establishment.logoUrl && <img src={info.establishment.logoUrl} alt="" className="hero-logo" />}<h1 style={{ margin: 0 }}>{info.establishment.name}</h1></div>
         <div className="small" style={{ opacity: .85 }}>{info.establishment.address} {info.establishment.city}</div></div>
       <div style={{ padding: '1rem', maxWidth: 560, margin: '0 auto' }}>
         {done ? (

@@ -3,7 +3,7 @@
  * Se genera un documento HTML independiente que se muestra en vista previa y se imprime tal cual.
  */
 export interface LabelData { table: string; qr: string }
-export interface LabelOptions { establishment: string; tagline: string; cropMarks?: boolean }
+export interface LabelOptions { establishment: string; tagline: string; cropMarks?: boolean; /** Dirección completa del logotipo del local (opcional). */ logoUrl?: string | null }
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 
@@ -60,6 +60,7 @@ function card(l: LabelData, o: LabelOptions): string {
       <div class="pill">NFC + QR</div>
     </div>
     <div class="main">
+      ${o.logoUrl ? `<img class="est-logo" src="${esc(o.logoUrl)}" alt="">` : ''}
       <div class="name">${esc(o.establishment)}</div>
       ${o.tagline ? `<div class="tagline">${esc(o.tagline)}</div>` : ''}
       <div class="row">
@@ -101,6 +102,7 @@ export function labelsHtml(labels: LabelData[], o: LabelOptions): string {
   .num { font-weight: 900; color: ${C.gold}; line-height: 1; margin: .6mm 0 auto; display: flex; align-items: center; flex: 1; }
   .pill { background: ${C.red}; color: #fff; font-weight: 800; font-size: 2.1mm; letter-spacing: .15mm; padding: .9mm 3.6mm; border-radius: 3mm; }
   .main { flex: 1; border-radius: 0 2mm 2mm 0; background-color: ${C.cream}; background-image: url("${pattern}"); background-size: 13mm 13mm; display: flex; flex-direction: column; align-items: center; padding: 3mm 2.5mm 2mm; text-align: center; }
+  .est-logo { display: block; height: 10mm; max-width: 32mm; object-fit: contain; margin-bottom: 1mm; }
   .name { font-weight: 900; font-size: 5mm; letter-spacing: .3mm; color: ${C.ink}; text-transform: uppercase; line-height: 1.05; max-width: 100%; overflow: hidden; }
   .tagline { font-size: 1.55mm; letter-spacing: .25mm; color: ${C.red}; text-transform: uppercase; font-weight: 700; margin-top: .6mm; }
   .row { display: flex; align-items: center; gap: 2.5mm; margin-top: 2mm; }
