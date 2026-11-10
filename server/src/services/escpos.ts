@@ -71,6 +71,24 @@ export class Ticket {
   cut() { return this.feed(3).raw(GS, 0x56, 66, 0); }
   /** Pitido (impresoras de cocina con zumbador; las que no lo tienen lo ignoran). */
   beep() { return this.raw(ESC, 0x42, 2, 2); }
+  /** Imagen en blanco y negro (GS v 0): ancho en puntos múltiplo de 8, 1 bit por punto. */
+  raster(width: number, height: number, data: Buffer) {
+    const bw = width / 8;
+    this.raw(GS, 0x76, 0x30, 0, bw & 0xff, bw >> 8, height & 0xff, height >> 8);
+    this.bytes.push(...data);
+    return this;
+  }
+  /** Código QR nativo de la impresora (GS ( k, modelo 2), corrección de errores M. */
+  qr(text: string, size = 6) {
+    const data = Buffer.from(text, 'utf8');
+    const n = data.length + 3;
+    this.raw(GS, 0x28, 0x6b, 4, 0, 0x31, 0x41, 0x32, 0);           // modelo 2
+    this.raw(GS, 0x28, 0x6b, 3, 0, 0x31, 0x43, size);              // tamaño del módulo
+    this.raw(GS, 0x28, 0x6b, 3, 0, 0x31, 0x45, 0x31);              // corrección M
+    this.raw(GS, 0x28, 0x6b, n & 0xff, n >> 8, 0x31, 0x50, 0x30);  // datos
+    this.bytes.push(...data);
+    return this.raw(GS, 0x28, 0x6b, 3, 0, 0x31, 0x51, 0x30);       // imprimir
+  }
   build(): Buffer { return Buffer.from(this.bytes); }
 }
 
@@ -108,9 +126,17 @@ const DOC_TITLE: Record<string, string> = { proforma: 'CUENTA (PROFORMA)', simpl
 const METHOD: Record<string, string> = { cash: 'Efectivo', card: 'Tarjeta', bizum: 'Bizum' };
 
 /** Ticket o factura a partir del documento guardado (mismo contenido que la vista previa en pantalla). */
-export function documentTicket(doc: { type: string; series: string; number: number; created_at: Date | string; total_cents: number; payload: any }, width = 48): Buffer {
+export interface TicketExtras {
+  /** Logotipo ya convertido a blanco y negro. */
+  logo?: { width: number; height: number; data: Buffer } | null;
+  /** Enlace del QR para pedir la factura completa (solo en tickets válidos). */
+  invoiceUrl?: string | null;
+}
+
+export function documentTicket(doc: { type: string; series: string; number: number; created_at: Date | string; total_cents: number; payload: any }, width = 48, extras: TicketExtras = {}): Buffer {
   const p = doc.payload;
   const t = new Ticket(width).align('center');
+  if (extras.logo) t.raster(extras.logo.width, extras.logo.height, extras.logo.data).line();
   t.bold(true).size(2).wrap(p.issuer.name ?? '', true).size(1).bold(false);
   if (p.issuer.legal_name) t.wrap(p.issuer.legal_name);
   if (p.issuer.tax_id) t.line(`NIF ${p.issuer.tax_id}`);
@@ -138,6 +164,10 @@ export function documentTicket(doc: { type: string; series: string; number: numb
   } else if (p.payments?.length) {
     t.rule();
     for (const x of p.payments) t.pair(METHOD[x.method] ?? x.method, euros(x.amountCents));
+  }
+  if (extras.invoiceUrl) {
+    t.rule().align('center').bold(true).line('¿Necesita factura completa?').bold(false);
+    t.line('Escanee el código e indique sus datos').qr(extras.invoiceUrl).line();
   }
   t.rule().align('center').line('Gracias por su visita');
   return t.cut().build();

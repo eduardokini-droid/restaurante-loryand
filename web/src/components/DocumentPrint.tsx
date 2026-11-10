@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import QRCode from 'qrcode';
+import { useSession } from '../lib/session';
 import { api } from '../lib/api';
 import { DOC_LABEL, dateTime, money } from '../lib/format';
 import { ErrorText, Modal, useAction, useToast } from './ui';
@@ -8,6 +10,12 @@ export function DocumentPrint({ id, onClose }: { id: string; onClose: () => void
   const [d, setD] = useState<any>(null);
   const [converting, setConverting] = useState(false);
   useEffect(() => { api(`/api/service/documents/${docId}`).then(setD).catch(() => {}); }, [docId]);
+  const { me } = useSession();
+  const settings = (me?.establishment?.settings ?? {}) as Record<string, unknown>;
+  const logo = settings.ticketLogo !== false ? me?.establishment?.logo_url : null;
+  const [qr, setQr] = useState('');
+  const invoiceUrl = d && d.type === 'simplified' && d.status === 'valid' && settings.ticketInvoiceQr !== false ? `${location.origin}/factura/${d.public_token}` : '';
+  useEffect(() => { if (invoiceUrl) QRCode.toDataURL(invoiceUrl, { width: 180, margin: 1 }).then(setQr); else setQr(''); }, [invoiceUrl]);
   if (!d) return null;
   const p = d.payload;
   const c = p.customer;
@@ -16,6 +24,7 @@ export function DocumentPrint({ id, onClose }: { id: string; onClose: () => void
       {d.status === 'replaced' && <p className="notice small">Este ticket se sustituyó por una factura completa. No lo entregues como justificante.</p>}
       <div className="printable">
         <div className="doc">
+          {logo && <div className="c"><img src={logo} alt="" style={{ maxWidth: 160, maxHeight: 70, objectFit: 'contain', filter: 'grayscale(1)' }} /></div>}
           <div className="c"><strong>{p.issuer.name}</strong></div>
           {p.issuer.legal_name && <div className="c">{p.issuer.legal_name}</div>}
           {p.issuer.tax_id && <div className="c">NIF {p.issuer.tax_id}</div>}
@@ -38,6 +47,7 @@ export function DocumentPrint({ id, onClose }: { id: string; onClose: () => void
           ))}
           {d.type === 'proforma' && <><hr /><div className="c"><strong>DOCUMENTO INFORMATIVO · NO ES JUSTIFICANTE DE PAGO</strong></div></>}
           {d.type !== 'proforma' && p.payments?.length > 0 && <><hr />{p.payments.map((x: any) => <div key={x.id} className="l"><span>{({ cash: 'Efectivo', card: 'Tarjeta', bizum: 'Bizum' } as any)[x.method]}</span><span>{money(x.amountCents)}</span></div>)}</>}
+          {qr && <><hr /><div className="c"><strong>¿Necesita factura completa?</strong><br />Escanee el código e indique sus datos<br /><img src={qr} alt="QR para pedir la factura completa" width={120} height={120} /></div></>}
           <hr /><div className="c">Gracias por su visita</div>
         </div>
       </div>

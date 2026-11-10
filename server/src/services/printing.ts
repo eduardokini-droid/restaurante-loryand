@@ -1,5 +1,6 @@
 import { sql, type Tx } from '../db.js';
-import { documentTicket, drawerKick, kitchenTicket, zReport } from './escpos.js';
+import { documentTicket, drawerKick, kitchenTicket, zReport, type TicketExtras } from './escpos.js';
+import { config } from '../config.js';
 
 type Q = typeof sql | Tx;
 export interface AutoPrint { kitchen: boolean; bar: boolean; ticket: boolean; drawer: boolean }
@@ -76,10 +77,21 @@ export async function printDocument(est: string, documentId: string, printerId?:
   const printers = printerId
     ? await sql`select id, name, width_chars from printers where id = ${printerId} and establishment_id = ${est} and active`
     : (await printersFor(sql, est, 'ticket')).slice(0, 1);
+  const extras = await ticketExtras(est, d);
   for (const p of printers) {
-    await enqueue(sql, est, p.id, d.type === 'proforma' ? 'proforma' : 'ticket', `${d.series}-${d.number} · ${d.payload.place}`, documentTicket(d as never, p.width_chars));
+    await enqueue(sql, est, p.id, d.type === 'proforma' ? 'proforma' : 'ticket', `${d.series}-${d.number} · ${d.payload.place}`, documentTicket(d as never, p.width_chars, extras));
   }
   return printers.length;
+}
+
+/** Logotipo y QR de factura del ticket, según los ajustes del local («ticketLogo» y «ticketInvoiceQr», activos por defecto). */
+async function ticketExtras(est: string, d: Record<string, any>): Promise<TicketExtras> {
+  const [e] = await sql`select settings, logo_print, logo_print_width, logo_print_height from establishments where id = ${est}`;
+  const s = e?.settings ?? {};
+  return {
+    logo: s.ticketLogo !== false && e?.logo_print ? { width: e.logo_print_width, height: e.logo_print_height, data: e.logo_print } : null,
+    invoiceUrl: s.ticketInvoiceQr !== false && d.type === 'simplified' && d.status === 'valid' ? `${config.publicUrl}/factura/${d.public_token}` : null,
+  };
 }
 
 export async function autoPrintTicket(est: string, documentId: string) {

@@ -38,6 +38,8 @@ const establishmentSchema = z.object({
     sharedTables: z.boolean(),
     blockPaymentUntilDelivered: z.boolean(),
     labelTagline: z.string().max(48),
+    ticketLogo: z.boolean(),
+    ticketInvoiceQr: z.boolean(),
     kdsWarnMin: z.number().int().min(1).max(120),
     kdsLateMin: z.number().int().min(2).max(240),
   }).partial(),

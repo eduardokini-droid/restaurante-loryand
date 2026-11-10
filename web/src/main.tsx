@@ -13,6 +13,7 @@ import Tarjeta from './pages/Tarjeta';
 import Pagar from './pages/Pagar';
 import Recuperar from './pages/Recuperar';
 import Legal from './pages/Legal';
+import Factura from './pages/Factura';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -25,6 +26,7 @@ createRoot(document.getElementById('root')!).render(
           <Route path="/tarjeta/:token" element={<Tarjeta />} />
           <Route path="/pagar/:token" element={<Pagar />} />
           <Route path="/legal/:slug" element={<Legal />} />
+          <Route path="/factura/:token" element={<Factura />} />
           <Route path="/recuperar/:token" element={<Recuperar />} />
           <Route path="/gestion/*" element={<SessionProvider><GestionLayout /></SessionProvider>} />
           <Route path="/personal" element={<SessionProvider><Personal /></SessionProvider>} />

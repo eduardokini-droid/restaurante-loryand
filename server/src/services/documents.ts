@@ -111,7 +111,7 @@ export async function convertToFull(tx: Tx, establishmentId: string, documentId:
   const [full] = await tx`
     insert into documents (establishment_id, account_id, type, series, number, total_cents, payload, payment_id, replaces_id)
     values (${establishmentId}, ${src.account_id}, 'full', ${series}, ${number}, ${src.total_cents}, ${tx.json({ ...src.payload, customer } as never)}, ${src.payment_id}, ${d.id})
-    returning id, series, number, total_cents, created_at`;
+    returning id, series, number, total_cents, created_at, public_token`;
   await tx`update documents set status = 'replaced' where id = ${d.id}`;
   return { document: full };
 }

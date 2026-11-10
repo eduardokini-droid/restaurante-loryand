@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { useSession } from '../lib/session';
 import { ErrorText, useAction, useToast } from '../components/ui';
-import { uploadImage } from '../lib/images';
+import { printBitmap, uploadImage } from '../lib/images';
 
 export const BUSINESS_TYPE: Record<string, string> = { restaurant: 'Bar / Restaurante', bar: 'Bar', cafe: 'Cafetería', pub: 'Pub / Coctelería', bakery: 'Panadería / Pastelería', icecream: 'Heladería', other: 'Otro' };
 
@@ -46,6 +46,8 @@ export default function Negocio() {
       <div className="card">
         <h3>Servicio</h3>
         <label className="check"><input type="checkbox" checked={!!f.settings.blockPaymentUntilDelivered} onChange={(e) => setting('blockPaymentUntilDelivered', e.target.checked)} /> No permitir cobrar con productos sin entregar</label>
+        <label className="check"><input type="checkbox" checked={f.settings.ticketLogo !== false} onChange={(e) => setting('ticketLogo', e.target.checked)} /> Imprimir el logotipo en los tickets</label>
+        <label className="check"><input type="checkbox" checked={f.settings.ticketInvoiceQr !== false} onChange={(e) => setting('ticketInvoiceQr', e.target.checked)} /> Imprimir en el ticket un QR para que el cliente pida su factura completa</label>
         <div className="grid cols-2 mt">
           <label>Cocina y barra: aviso naranja a los (minutos)<input type="number" min={1} max={120} value={f.settings.kdsWarnMin ?? 10} onChange={(e) => setF({ ...f, settings: { ...f.settings, kdsWarnMin: Number(e.target.value) } })} /></label>
           <label>Aviso rojo a los (minutos)<input type="number" min={2} max={240} value={f.settings.kdsLateMin ?? 20} onChange={(e) => setF({ ...f, settings: { ...f.settings, kdsLateMin: Number(e.target.value) } })} /></label>
@@ -81,7 +83,9 @@ function LogoCard() {
   const logo = me?.establishment?.logo_url;
   const pick = (file: File | undefined) => file && run(async () => {
     const img = await uploadImage(file, 'logo');
-    await api('/api/admin/logo', { method: 'PUT', body: { imageId: img.id } });
+    // Versión en blanco y negro para que salga en el ticket impreso.
+    const print = await printBitmap(img.url).catch(() => null);
+    await api('/api/admin/logo', { method: 'PUT', body: { imageId: img.id, print } });
     await refresh(); toast('Logotipo guardado');
   });
   const remove = () => run(async () => { await api('/api/admin/logo', { method: 'PUT', body: { imageId: null } }); await refresh(); });

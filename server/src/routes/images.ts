@@ -44,13 +44,23 @@ export default async function imageRoutes(app: FastifyInstance) {
     const a = requireActor(req);
     requireModule(req, 'config');
     const est = establishmentOf(req);
-    const { imageId } = parse(z.object({ imageId: z.string().uuid().nullable() }), req.body);
+    const { imageId, print } = parse(z.object({
+      imageId: z.string().uuid().nullable(),
+      /** Versión en blanco y negro para la impresora de tickets, preparada en el navegador. */
+      print: z.object({ width: z.number().int().min(8).max(576).refine((w) => w % 8 === 0), height: z.number().int().min(1).max(400), data: z.string().max(40_000) }).nullish(),
+    }), req.body);
+    let printData: Buffer | null = null;
+    if (imageId && print) {
+      printData = Buffer.from(print.data, 'base64');
+      if (printData.length !== (print.width / 8) * print.height) throw badRequest('La versión para impresora no tiene el tamaño indicado');
+    }
     if (imageId) {
       const [img] = await sql`select 1 from images where id = ${imageId} and establishment_id = ${est} and kind = 'logo'`;
       if (!img) throw notFound('Imagen');
     }
     await sql.begin(async (tx) => {
-      await tx`update establishments set logo_image_id = ${imageId} where id = ${est}`;
+      await tx`update establishments set logo_image_id = ${imageId}, logo_print = ${printData},
+               logo_print_width = ${printData ? print!.width : null}, logo_print_height = ${printData ? print!.height : null} where id = ${est}`;
       await audit(tx, est, actorLabel(a), 'establishment.logo', { imageId });
     });
     return { ok: true, logoUrl: imageId ? `/api/img/${imageId}` : null };
