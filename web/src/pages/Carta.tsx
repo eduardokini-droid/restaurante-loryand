@@ -16,6 +16,7 @@ export default function Carta() {
   const [cats, setCats] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [editing, setEditing] = useState<Product | 'new' | null>(null);
+  const [catsOpen, setCatsOpen] = useState(false);
   const [filter, setFilter] = useState('');
   const [catFilter, setCatFilter] = useState('');
   const load = useCallback(() => {
@@ -28,8 +29,12 @@ export default function Carta() {
 
   return (
     <div className="stack">
-      <div className="spread"><h1>Configuración y carta</h1><button className="btn primary" onClick={() => setEditing('new')}>+ Añadir producto</button></div>
-      <Categories cats={cats} onChange={load} />
+      <div className="spread"><h1>Configuración y carta</h1>
+        <span className="row">
+          <button className="btn" onClick={() => setCatsOpen(true)}>Categorías y subcategorías ({cats.length})</button>
+          <button className="btn primary" onClick={() => setEditing('new')}>+ Añadir producto</button>
+        </span></div>
+      {catsOpen && <Categories cats={cats} onChange={load} onClose={() => setCatsOpen(false)} />}
       <div className="card">
         <div className="row" style={{ marginBottom: '.5rem' }}>
           <input style={{ maxWidth: 280 }} placeholder="Buscar producto" value={filter} onChange={(e) => setFilter(e.target.value)} />
@@ -61,36 +66,72 @@ export default function Carta() {
   );
 }
 
-function Categories({ cats, onChange }: { cats: Category[]; onChange: () => void }) {
+/** Categorías y subcategorías: crear, renombrar, ordenar y borrar. */
+function Categories({ cats, onChange, onClose }: { cats: Category[]; onChange: () => void; onClose: () => void }) {
   const [name, setName] = useState('');
   const [parent, setParent] = useState('');
   const { busy, error, run } = useAction();
-  const add = () => run(async () => { await api('/api/admin/categories', { body: { name, parentId: parent || null } }); setName(''); onChange(); });
-  const del = (c: Category) => run(async () => { if (confirm(`¿Borrar la categoría «${c.name}»?`)) { await api(`/api/admin/categories/${c.id}`, { method: 'DELETE' }); onChange(); } });
   const roots = cats.filter((c) => !c.parent_id);
-  return (
-    <details className="card">
-      <summary><strong>Categorías y subcategorías</strong> <span className="muted small">({cats.length})</span></summary>
-      <div className="mt">
-        {roots.map((r) => (
-          <div key={r.id} style={{ marginBottom: '.5rem' }}>
-            <strong>{r.name}</strong> <button className="btn small ghost" disabled={busy} onClick={() => del(r)}>borrar</button>
-            <div className="row small" style={{ gap: '.35rem', marginLeft: '1rem' }}>
-              {cats.filter((c) => c.parent_id === r.id).map((s) => <span key={s.id} className="badge grey">{s.name} <button className="btn ghost small" style={{ minHeight: 0, padding: 0 }} onClick={() => del(s)}>✕</button></span>)}
-            </div>
-          </div>
-        ))}
-        <div className="row mt">
-          <input style={{ maxWidth: 220 }} placeholder="Nombre" value={name} onChange={(e) => setName(e.target.value)} />
-          <select style={{ maxWidth: 240 }} value={parent} onChange={(e) => setParent(e.target.value)}>
-            <option value="">Categoría principal</option>
-            {roots.map((r) => <option key={r.id} value={r.id}>Subcategoría de {r.name}</option>)}
-          </select>
-          <button className="btn" disabled={busy || !name.trim()} onClick={add}>Crear</button>
-        </div>
-        <ErrorText error={error} />
+  const childrenOf = (id: string) => cats.filter((c) => c.parent_id === id);
+  const add = () => run(async () => {
+    const siblings = parent ? childrenOf(parent) : roots;
+    await api('/api/admin/categories', { body: { name: name.trim(), parentId: parent || null, sort: siblings.length } });
+    setName(''); onChange();
+  });
+  const rename = (c: Category) => {
+    const n = prompt(`Nuevo nombre para «${c.name}»`, c.name);
+    if (n && n.trim() && n.trim() !== c.name) run(async () => { await api(`/api/admin/categories/${c.id}`, { method: 'PATCH', body: { name: n.trim() } }); onChange(); });
+  };
+  const del = (c: Category) => run(async () => {
+    if (!confirm(`¿Borrar «${c.name}»?${c.parent_id ? '' : ' También se borrarán sus subcategorías vacías.'}`)) return;
+    await api(`/api/admin/categories/${c.id}`, { method: 'DELETE' }); onChange();
+  });
+  /** Sube o baja una categoría entre sus hermanas y guarda el orden de todas. */
+  const move = (c: Category, dir: -1 | 1) => run(async () => {
+    const list = c.parent_id ? childrenOf(c.parent_id) : roots;
+    const i = list.findIndex((x) => x.id === c.id);
+    const j = i + dir;
+    if (j < 0 || j >= list.length) return;
+    const order = [...list];
+    [order[i], order[j]] = [order[j], order[i]];
+    for (let k = 0; k < order.length; k++) if (order[k].sort !== k) await api(`/api/admin/categories/${order[k].id}`, { method: 'PATCH', body: { sort: k } });
+    onChange();
+  });
+  const Row = ({ c, list, sub }: { c: Category; list: Category[]; sub?: boolean }) => {
+    const i = list.findIndex((x) => x.id === c.id);
+    return (
+      <div className="spread" style={{ padding: '.4rem 0', borderBottom: '1px solid var(--line)', marginLeft: sub ? '1.4rem' : 0 }}>
+        <span>{sub ? '↳ ' : ''}{sub ? c.name : <strong>{c.name}</strong>}</span>
+        <span className="row" style={{ gap: '.2rem' }}>
+          <button className="btn small ghost" disabled={busy || i === 0} onClick={() => move(c, -1)} aria-label={`Subir ${c.name}`}>↑</button>
+          <button className="btn small ghost" disabled={busy || i === list.length - 1} onClick={() => move(c, 1)} aria-label={`Bajar ${c.name}`}>↓</button>
+          <button className="btn small ghost" disabled={busy} onClick={() => rename(c)}>Renombrar</button>
+          <button className="btn small ghost danger" disabled={busy} onClick={() => del(c)}>Borrar</button>
+        </span>
       </div>
-    </details>
+    );
+  };
+  return (
+    <Modal title="Categorías y subcategorías" onClose={onClose}>
+      <p className="small muted">Las categorías salen como botones en la carta del cliente y en el TPV, en este orden. Las subcategorías aparecen al pulsar su categoría.</p>
+      {roots.length === 0 && <p className="muted">Todavía no hay categorías.</p>}
+      {roots.map((r) => (
+        <div key={r.id}>
+          <Row c={r} list={roots} />
+          {childrenOf(r.id).map((s) => <Row key={s.id} c={s} list={childrenOf(r.id)} sub />)}
+        </div>
+      ))}
+      <h3 className="mt">Crear nueva</h3>
+      <label>Nombre<input value={name} onChange={(e) => setName(e.target.value)} placeholder="Por ejemplo: Cócteles" onKeyDown={(e) => { if (e.key === 'Enter' && name.trim()) add(); }} /></label>
+      <label>Dónde va
+        <select value={parent} onChange={(e) => setParent(e.target.value)}>
+          <option value="">Categoría principal (botón propio)</option>
+          {roots.map((r) => <option key={r.id} value={r.id}>Subcategoría dentro de «{r.name}»</option>)}
+        </select>
+      </label>
+      <ErrorText error={error} />
+      <button className="btn primary block" disabled={busy || !name.trim()} onClick={add}>Crear {parent ? 'subcategoría' : 'categoría'}</button>
+    </Modal>
   );
 }
 
