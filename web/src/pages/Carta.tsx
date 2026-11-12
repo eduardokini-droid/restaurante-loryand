@@ -4,6 +4,7 @@ import { ALLERGENS, money, toCents } from '../lib/format';
 import { ErrorText, Modal, useAction, useToast } from '../components/ui';
 import { LANGS } from '../lib/i18n';
 import { uploadImage } from '../lib/images';
+import { ImportMenu } from '../components/ImportMenu';
 
 interface Category { id: string; parent_id: string | null; name: string; sort: number }
 interface Product {
@@ -17,6 +18,7 @@ export default function Carta() {
   const [products, setProducts] = useState<Product[]>([]);
   const [editing, setEditing] = useState<Product | 'new' | null>(null);
   const [catsOpen, setCatsOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [filter, setFilter] = useState('');
   const [catFilter, setCatFilter] = useState('');
   const load = useCallback(() => {
@@ -42,6 +44,7 @@ export default function Carta() {
     <div className="stack">
       <div className="spread"><h1>Configuración y carta</h1>
         <span className="row">
+          <button className="btn" onClick={() => setImporting(true)}>Importar carta</button>
           <button className="btn" onClick={() => setCatsOpen(true)}>Categorías y subcategorías ({cats.length})</button>
           <button className="btn primary" onClick={() => setEditing('new')}>+ Añadir producto</button>
         </span></div>
@@ -52,6 +55,7 @@ export default function Carta() {
           {!trStatus.missing.running && <button className="btn small primary" onClick={translateAll}>Traducir lo que falta</button>}
         </div>
       )}
+      {importing && <ImportMenu onClose={() => setImporting(false)} onDone={() => { load(); loadTr(); }} />}
       {catsOpen && <Categories cats={cats} onChange={load} onClose={() => setCatsOpen(false)} />}
       <div className="card">
         <div className="row" style={{ marginBottom: '.5rem' }}>
