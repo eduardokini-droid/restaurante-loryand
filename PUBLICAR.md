@@ -52,12 +52,19 @@ Cuando quieras sustituir la versión antigua, se hace lo mismo con `restaurante`
 - Copias de seguridad: Render guarda copias diarias de la base de datos en los planes de pago
   (**loryand-db** → **Recovery**). La fase 3 añade además copias propias del programa.
 
-## 6. Traducción automática de la carta (opcional)
-Las traducciones se pueden escribir a mano en la ficha de cada producto. Para el botón
-«Traducir automáticamente desde el español» hace falta una clave de DeepL (https://www.deepl.com/pro-api,
-hay plan gratuito):
-1. En Render: servicio **restaurante-loryand** → **Environment** → **Add Environment Variable**.
-2. Nombre `DEEPL_API_KEY`, valor tu clave. Guarda: el servicio se reinicia solo.
+## 6. Traducción automática de la carta
+Cada producto y cada categoría se traducen solos a inglés, francés, alemán, italiano, portugués y ruso al guardarlos
+(tardan unos segundos). Lo que se escriba a mano en la ficha del producto se respeta. Para la carta que ya existía,
+en **Configuración y carta** aparece el aviso «Faltan por traducir…» con el botón **Traducir lo que falta**.
+
+Sin configurar nada se usa un servicio gratuito (MyMemory), con un límite de unos 5.000 caracteres al día:
+suficiente para ir añadiendo productos, pero puede quedarse corto para traducir una carta grande de golpe.
+Para más capacidad y mejor calidad (recomendado):
+1. Crea una cuenta gratuita de **DeepL API Free** (https://www.deepl.com/pro-api): 500.000 caracteres al mes.
+2. En Render: servicio **restaurante-loryand** → **Environment** → **Add Environment Variable**.
+3. Nombre `DEEPL_API_KEY`, valor tu clave. Guarda: el servicio se reinicia solo.
+
+Alternativa sin DeepL: la variable `MYMEMORY_EMAIL` con un correo de contacto sube el límite gratuito a 50.000 caracteres al día.
 
 ## 7. Pagos online con Redsys (tarjeta y Bizum)
 Se configura en **Gestión → Pagos y WhatsApp** (solo el administrador).

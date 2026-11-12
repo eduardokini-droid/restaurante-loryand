@@ -7,7 +7,7 @@ import { parse } from '../validate.js';
 import { notify } from '../realtime.js';
 import { audit } from '../services/audit.js';
 import { AppError } from '../errors.js';
-import { LANGS, translateTexts, translationAvailable } from '../services/translate.js';
+import { LANGS, autoTranslateCategory, autoTranslateProduct, missingTranslations, translateLater, translateMissing, translationProvider } from '../services/translate.js';
 
 export const ALLERGENS = [
   'gluten', 'crustaceos', 'huevos', 'pescado', 'cacahuetes', 'soja', 'lacteos',
@@ -65,7 +65,7 @@ const productSchema = z.object({
   categoryId: z.string().uuid().nullable().default(null),
   subcategoryId: z.string().uuid().nullable().default(null),
   photoUrl: photoUrl.nullable().default(null),
-  translations: z.partialRecord(z.enum(LANGS), z.object({ name: z.string().max(120).default(''), description: z.string().max(600).default('') })).optional(),
+  translations: z.partialRecord(z.enum(LANGS), z.object({ name: z.string().max(120).default(''), description: z.string().max(600).default(''), manual: z.boolean().optional() })).optional(),
 });
 
 /** Campos de producto SIN valores por defecto: al editar solo cambia lo que se envía. */
@@ -82,7 +82,7 @@ const productEdit = z.object({
   categoryId: z.string().uuid().nullable(),
   subcategoryId: z.string().uuid().nullable(),
   photoUrl: photoUrl.nullable(),
-  translations: z.partialRecord(z.enum(LANGS), z.object({ name: z.string().max(120).default(''), description: z.string().max(600).default('') })),
+  translations: z.partialRecord(z.enum(LANGS), z.object({ name: z.string().max(120).default(''), description: z.string().max(600).default(''), manual: z.boolean().optional() })),
 }).partial();
 
 const tableSchema = z.object({
@@ -287,6 +287,7 @@ export default async function adminRoutes(app: FastifyInstance) {
     }
     const [c] = await sql`insert into categories (establishment_id, parent_id, name, sort) values (${est}, ${b.parentId}, ${b.name}, ${b.sort}) returning *`;
     notify(est, ['products']);
+    translateLater(() => autoTranslateCategory(est, c.id), (e) => req.log.warn({ e }, 'No se pudo traducir la categoría'));
     return c;
   });
 
@@ -300,6 +301,7 @@ export default async function adminRoutes(app: FastifyInstance) {
     const [c] = await sql`update categories set ${sql(cols)} where id = ${cid} and establishment_id = ${est} returning *`;
     if (!c) throw notFound('Categoría');
     notify(est, ['products']);
+    if (b.name && !b.translations) translateLater(() => autoTranslateCategory(est, cid), (e) => req.log.warn({ e }, 'No se pudo traducir la categoría'));
     return c;
   });
 
@@ -352,6 +354,8 @@ export default async function adminRoutes(app: FastifyInstance) {
     const [p] = await sql`insert into products ${sql({ establishment_id: est, ...productCols(b) })} returning *`;
     await sql.begin((tx) => audit(tx, est, actorLabel(a), 'product.create', { productId: p.id, name: p.name }));
     notify(est, ['products']);
+    // Se traduce solo, sin hacer esperar al guardar (los idiomas escritos a mano se respetan).
+    translateLater(() => autoTranslateProduct(est, p.id), (e) => req.log.warn({ e }, 'No se pudo traducir el producto'));
     return p;
   });
 
@@ -360,7 +364,7 @@ export default async function adminRoutes(app: FastifyInstance) {
     const est = establishmentOf(req);
     const { id: pid } = parse(id, req.params);
     const b = parse(productEdit, req.body);
-    const [cur] = await sql`select category_id, subcategory_id, price_cents from products where id = ${pid} and establishment_id = ${est} and not archived`;
+    const [cur] = await sql`select category_id, subcategory_id, price_cents, name, description from products where id = ${pid} and establishment_id = ${est} and not archived`;
     if (!cur) throw notFound('Producto');
     const categoryId = b.categoryId !== undefined ? b.categoryId : cur.category_id;
     const subcategoryId = b.subcategoryId !== undefined ? b.subcategoryId : (b.categoryId !== undefined && b.categoryId !== cur.category_id ? null : cur.subcategory_id);
@@ -371,12 +375,24 @@ export default async function adminRoutes(app: FastifyInstance) {
       await sql.begin((tx) => audit(tx, est, actorLabel(a), 'product.price', { productId: pid, from: cur.price_cents, to: b.priceCents }));
     }
     notify(est, ['products']);
+    if ((b.name !== undefined && b.name !== cur.name) || (b.description !== undefined && b.description !== cur.description)) {
+      translateLater(() => autoTranslateProduct(est, pid), (e) => req.log.warn({ e }, 'No se pudo traducir el producto'));
+    }
     return p;
   });
 
+  /** Qué falta por traducir y con qué servicio se traduce. */
   app.get('/api/admin/translation-status', async (req) => {
     requireModule(req, 'config');
-    return { available: translationAvailable() };
+    return { available: true, provider: translationProvider(), missing: await missingTranslations(establishmentOf(req)) };
+  });
+
+  /** «Traducir lo que falta»: toda la carta en segundo plano. */
+  app.post('/api/admin/translate-missing', async (req) => {
+    requireModule(req, 'config');
+    const est = establishmentOf(req);
+    const started = translateMissing(est, (e) => req.log.warn({ e }, 'Error al traducir la carta'));
+    return { started, missing: await missingTranslations(est) };
   });
 
   /** "Traducir automáticamente desde el español": nombre y descripción a los seis idiomas. */
@@ -384,15 +400,15 @@ export default async function adminRoutes(app: FastifyInstance) {
     requireModule(req, 'config');
     const est = establishmentOf(req);
     const { id: pid } = parse(id, req.params);
-    if (!translationAvailable()) throw new AppError(409, 'translation_unavailable', 'La traducción automática no está configurada (falta la clave de DeepL). Puedes escribir las traducciones a mano.');
-    const [p] = await sql`select name, description, translations from products where id = ${pid} and establishment_id = ${est}`;
+    const [p] = await sql`select translations from products where id = ${pid} and establishment_id = ${est}`;
     if (!p) throw notFound('Producto');
-    let t;
-    try { t = await translateTexts([p.name, p.description || ' ']); } catch (e) {
+    // El botón vuelve a traducir todos los idiomas, también los que se escribieron a mano.
+    const cleared = Object.fromEntries(Object.entries(p.translations ?? {}).map(([l, v]) => [l, { ...(v as object), manual: false }]));
+    await sql`update products set translations = ${sql.json(cleared)} where id = ${pid}`;
+    try { await autoTranslateProduct(est, pid); } catch (e) {
       throw new AppError(502, 'translation_failed', `No se pudo traducir: ${(e as Error).message}. El producto sigue guardado; inténtalo de nuevo.`);
     }
-    const translations = Object.fromEntries(LANGS.map((l) => [l, { name: t[l][0], description: p.description ? t[l][1] : '' }]));
-    const [u] = await sql`update products set translations = ${sql.json(translations)} where id = ${pid} returning *`;
+    const [u] = await sql`select * from products where id = ${pid}`;
     return u;
   });
 

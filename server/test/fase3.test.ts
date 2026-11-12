@@ -7,7 +7,6 @@ import { hashPassword, pinLookup } from '../src/auth.js';
 import { resetRateLimits } from '../src/ratelimit.js';
 import { toItemUnit } from '../src/services/stock.js';
 import { vatBreakdown } from '../src/services/documents.js';
-import { translateTexts } from '../src/services/translate.js';
 
 let app: FastifyInstance;
 let est: string;
@@ -236,20 +235,6 @@ describe('idiomas y plano', () => {
     const [t] = await sql`select qr_token from tables where id = ${tableId}`;
     const carta = (await app.inject({ method: 'GET', url: `/api/public/table/${t.qr_token}` })).json();
     expect(carta.products.find((p: { name: string }) => p.name === 'Plato').translations.en.name).toBe('Dish');
-  });
-
-  it('sin clave de DeepL avisa; con clave traduce a los seis idiomas', async () => {
-    expect((await call(admin, 'POST', `/api/admin/products/${P.plato}/translate`)).json().error).toBe('translation_unavailable');
-    process.env.DEEPL_API_KEY = 'test:fx';
-    const calls: string[] = [];
-    const fake = (async (_url: string, init: { body: string }) => {
-      const b = JSON.parse(init.body);
-      calls.push(b.target_lang);
-      return { ok: true, json: async () => ({ translations: b.text.map((x: string) => ({ text: `${b.target_lang}:${x}` })) }) };
-    }) as unknown as typeof fetch;
-    const out = await translateTexts(['Croquetas', 'Caseras'], fake);
-    expect(calls).toEqual(['EN-GB', 'FR', 'DE', 'IT', 'PT-PT', 'RU']);
-    expect(out.fr).toEqual(['FR:Croquetas', 'FR:Caseras']);
   });
 
   it('guarda la posición de las mesas en el plano', async () => {

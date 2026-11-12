@@ -9,7 +9,7 @@ interface Category { id: string; parent_id: string | null; name: string; sort: n
 interface Product {
   id: string; name: string; description: string; price_cents: number; vat_rate: string; destination: string; course: number;
   visible: boolean; options: string[]; allergens: string[]; category_id: string | null; subcategory_id: string | null; photo_url: string | null;
-  translations: Record<string, { name: string; description: string }>;
+  translations: Record<string, { name: string; description: string; manual?: boolean }>;
 }
 
 export default function Carta() {
@@ -24,6 +24,17 @@ export default function Carta() {
     api('/api/admin/products').then(setProducts).catch(() => {});
   }, []);
   useEffect(load, [load]);
+  // Estado de la traducción: cuánto falta y si se está traduciendo en este momento.
+  const [trStatus, setTrStatus] = useState<{ provider: string; missing: { products: number; categories: number; running: boolean } } | null>(null);
+  const loadTr = useCallback(() => { api<any>('/api/admin/translation-status').then(setTrStatus).catch(() => {}); }, []);
+  useEffect(loadTr, [loadTr, products.length]);
+  useEffect(() => {
+    if (!trStatus?.missing.running) return;
+    const t = setTimeout(() => { loadTr(); load(); }, 3000);
+    return () => clearTimeout(t);
+  }, [trStatus, loadTr, load]);
+  const translateAll = () => { api('/api/admin/translate-missing', { body: {} }).then(() => loadTr()).catch(() => {}); };
+  const missing = trStatus ? trStatus.missing.products + trStatus.missing.categories : 0;
   const catName = (id: string | null) => cats.find((c) => c.id === id)?.name ?? '—';
   const shown = products.filter((p) => p.name.toLowerCase().includes(filter.toLowerCase()) && (!catFilter || p.category_id === catFilter));
 
@@ -34,6 +45,13 @@ export default function Carta() {
           <button className="btn" onClick={() => setCatsOpen(true)}>Categorías y subcategorías ({cats.length})</button>
           <button className="btn primary" onClick={() => setEditing('new')}>+ Añadir producto</button>
         </span></div>
+      {trStatus && (missing > 0 || trStatus.missing.running) && (
+        <div className="notice spread">
+          <span>{trStatus.missing.running ? 'Traduciendo la carta a 6 idiomas… puedes seguir trabajando.'
+            : `Faltan por traducir ${trStatus.missing.products} producto${trStatus.missing.products === 1 ? '' : 's'}${trStatus.missing.categories ? ` y ${trStatus.missing.categories} categoría${trStatus.missing.categories === 1 ? '' : 's'}` : ''}.`}</span>
+          {!trStatus.missing.running && <button className="btn small primary" onClick={translateAll}>Traducir lo que falta</button>}
+        </div>
+      )}
       {catsOpen && <Categories cats={cats} onChange={load} onClose={() => setCatsOpen(false)} />}
       <div className="card">
         <div className="row" style={{ marginBottom: '.5rem' }}>
@@ -146,7 +164,9 @@ function ProductForm({ product, cats, onClose, onSaved }: { product: Product | n
   const { busy, error, run } = useAction();
   const toast = useToast();
   const set = (k: string, v: unknown) => setF((x) => ({ ...x, [k]: v }));
-  const [tr, setTr] = useState<Record<string, { name: string; description: string }>>(product?.translations ?? {});
+  const [tr, setTr] = useState<Record<string, { name: string; description: string; manual?: boolean }>>(product?.translations ?? {});
+  /** Lo que se escribe a mano queda marcado para que la traducción automática no lo pise. */
+  const typeTr = (k: 'name' | 'description', v: string) => setTr({ ...tr, [lang]: { name: tr[lang]?.name ?? '', description: tr[lang]?.description ?? '', [k]: v, manual: true } });
   const [lang, setLang] = useState('en');
   const doneLangs = LANGS.filter(([k]) => k !== 'es' && tr[k]?.name).length;
   const autoTranslate = () => run(async () => { const p = await api(`/api/admin/products/${product!.id}/translate`, { body: {} }); setTr(p.translations); toast('Traducido a 6 idiomas. Revisa ingredientes y nombres comerciales.'); });
@@ -217,10 +237,11 @@ function ProductForm({ product, cats, onClose, onSaved }: { product: Product | n
       <details className="card" style={{ marginBottom: '.75rem' }}>
         <summary><strong>Traducciones del producto</strong> <span className="small muted">({doneLangs} de 6 idiomas)</span></summary>
         <div className="chips mt">{LANGS.filter(([k]) => k !== 'es').map(([k, l]) => <button key={k} className={`chip ${lang === k ? 'on' : ''}`} onClick={() => setLang(k)}>{l}{tr[k]?.name ? ' ✓' : ''}</button>)}</div>
-        <label className="mt">Nombre<input value={tr[lang]?.name ?? ''} onChange={(e) => setTr({ ...tr, [lang]: { name: e.target.value, description: tr[lang]?.description ?? '' } })} placeholder={f.name} /></label>
-        <label>Descripción<textarea rows={2} value={tr[lang]?.description ?? ''} onChange={(e) => setTr({ ...tr, [lang]: { name: tr[lang]?.name ?? '', description: e.target.value } })} placeholder={f.description} /></label>
-        {product && <button className="btn small" disabled={busy} onClick={autoTranslate}>Traducir automáticamente desde el español</button>}
-        <p className="small muted">Si cambias el nombre o la descripción en español, revisa también las traducciones. No traduzcas marcas comerciales.</p>
+        <label className="mt">Nombre<input value={tr[lang]?.name ?? ''} onChange={(e) => typeTr('name', e.target.value)} placeholder={f.name} /></label>
+        <label>Descripción<textarea rows={2} value={tr[lang]?.description ?? ''} onChange={(e) => typeTr('description', e.target.value)} placeholder={f.description} /></label>
+        {tr[lang]?.manual && <p className="small muted" style={{ marginTop: '-.3rem' }}>Escrita a mano: la traducción automática no la cambiará.</p>}
+        {product && <button className="btn small" disabled={busy} onClick={autoTranslate}>Volver a traducir todo automáticamente</button>}
+        <p className="small muted">Al guardar, el producto se traduce solo a los 6 idiomas (tarda unos segundos). Lo que escribas a mano aquí se respeta. Revisa nombres comerciales e ingredientes.</p>
       </details>
       <label className="check"><input type="checkbox" checked={f.visible} onChange={(e) => set('visible', e.target.checked)} /> Visible en la carta del cliente</label>
       <ErrorText error={error} />
