@@ -45,7 +45,8 @@ export async function buildApp(opts: { logger?: boolean } = {}) {
     return reply.status(500).send({ error: 'internal', message: 'Error interno. Anota la hora y la acción realizada.' });
   });
 
-  app.get('/api/health', async () => ({ ok: true }));
+  // Render pone en RENDER_GIT_COMMIT la versión publicada: así se ve en el panel qué versión está funcionando.
+  app.get('/api/health', async () => ({ ok: true, version: (process.env.RENDER_GIT_COMMIT ?? 'local').slice(0, 7) }));
   await app.register(authRoutes);
   await app.register(adminRoutes);
   await app.register(serviceRoutes);

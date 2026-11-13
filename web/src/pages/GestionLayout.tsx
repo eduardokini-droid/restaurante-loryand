@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useSession } from '../lib/session';
 import { getSelectedEstablishment, setSelectedEstablishment } from '../lib/api';
@@ -53,6 +54,13 @@ const NAV: { to: string; label: string; module: string }[] = [
   { to: 'cuenta', label: 'Mi cuenta', module: 'self' },
 ];
 
+/** Versión publicada (la misma que muestra Render en «Events»). */
+function Version() {
+  const [v, setV] = useState('');
+  useEffect(() => { fetch('/api/health').then((r) => r.json()).then((j) => setV(j.version ?? '')).catch(() => {}); }, []);
+  return v ? <div style={{ opacity: .6, fontSize: '.7rem', marginTop: '.4rem' }}>Versión {v}</div> : null;
+}
+
 export default function GestionLayout() {
   const { me, loading, logout, refresh } = useSession();
   const { pathname } = useLocation();
@@ -80,6 +88,7 @@ export default function GestionLayout() {
           {me.actor.name}<br />
           {isSuper && <button className="btn small ghost" style={{ color: '#fff', padding: 0 }} onClick={() => { setSelectedEstablishment(null); location.assign('/gestion'); }}>Cambiar establecimiento</button>}
           <button className="btn small ghost" style={{ color: '#fff', padding: 0 }} onClick={logout}>Salir / cambiar usuario</button>
+          <Version />
         </div>
       </nav>
       <main className="main">
